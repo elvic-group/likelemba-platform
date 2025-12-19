@@ -12,6 +12,21 @@ const aiAgentService = require('../aiAgent');
 const templates = require('../../templates/whatsapp');
 
 class WhatsAppHandler {
+  constructor() {
+    // Track processed message IDs to prevent duplicates
+    this.processedMessages = new Map();
+    // Clean up old entries every 5 minutes (keep last 1000 messages)
+    setInterval(() => {
+      if (this.processedMessages.size > 1000) {
+        const entries = Array.from(this.processedMessages.entries());
+        // Keep only the most recent 500 entries
+        this.processedMessages.clear();
+        entries.slice(-500).forEach(([key, value]) => {
+          this.processedMessages.set(key, value);
+        });
+      }
+    }, 5 * 60 * 1000);
+  }
   /**
    * Handle incoming webhook from Green API
    */
@@ -33,13 +48,27 @@ class WhatsAppHandler {
         return;
       }
 
+      // Extract message ID for deduplication
+      const messageId = messageData?.idMessage || messageData?.id || null;
+      
+      // Prevent duplicate processing
+      if (messageId && this.processedMessages.has(messageId)) {
+        console.log(`⏭️ Skipping duplicate message: ${messageId}`);
+        return;
+      }
+
+      // Mark message as processed
+      if (messageId) {
+        this.processedMessages.set(messageId, Date.now());
+      }
+
       // Extract phone number (remove @c.us suffix)
       const phone = senderData.sender.replace('@c.us', '');
       const senderName = senderData.senderName || 'User';
 
       // CRITICAL: Only respond to users who have contacted us first
       // This prevents sending messages to contacts who haven't initiated contact
-      console.log(`📨 Incoming message from ${phone} (${senderName})`);
+      console.log(`📨 Incoming message from ${phone} (${senderName})${messageId ? ` [ID: ${messageId}]` : ''}`);
 
       // Extract message text - try multiple formats
       let message = '';
