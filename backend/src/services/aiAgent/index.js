@@ -293,13 +293,8 @@ class AIAgentService {
 
       // Handle tool calls if any
       if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-        // Save assistant message with tool calls
-        await this.saveConversation(
-          user.id,
-          'assistant',
-          assistantMessage.content || '',
-          assistantMessage.tool_calls
-        );
+        // Don't save tool_calls to database - we only save the final response
+        // This prevents errors when loading history (tool_calls without tool responses)
 
         // Execute tool calls
         const toolResults = [];
@@ -341,7 +336,7 @@ class AIAgentService {
 
         const finalResponse = finalCompletion.choices[0].message.content;
 
-        // Save final response (tool results don't need to be saved separately as they're part of the conversation flow)
+        // Save final response only (not tool_calls - prevents history loading errors)
         await this.saveConversation(user.id, 'assistant', finalResponse);
 
         return finalResponse;
@@ -708,6 +703,8 @@ Keep responses conversational, helpful, and concise.`;
 
   /**
    * Get conversation history
+   * IMPORTANT: We don't save tool responses separately, so we exclude tool_calls
+   * from history to prevent OpenAI errors about missing tool responses
    */
   async getConversationHistory(userId, limit = 20) {
     try {
@@ -726,13 +723,16 @@ Keep responses conversational, helpful, and concise.`;
           content: row.content || '',
         };
 
-        // Parse tool calls if present
-        if (row.tool_calls_json) {
-          const toolCalls = typeof row.tool_calls_json === 'string' 
-            ? JSON.parse(row.tool_calls_json) 
-            : row.tool_calls_json;
-          message.tool_calls = toolCalls;
-        }
+        // CRITICAL FIX: Don't include tool_calls in history
+        // Since we don't save tool responses separately, including tool_calls
+        // causes OpenAI to expect tool responses that don't exist in history
+        // The final assistant response (after tool execution) is sufficient for context
+        // if (row.tool_calls_json) {
+        //   const toolCalls = typeof row.tool_calls_json === 'string' 
+        //     ? JSON.parse(row.tool_calls_json) 
+        //     : row.tool_calls_json;
+        //   message.tool_calls = toolCalls;
+        // }
 
         return message;
       });
