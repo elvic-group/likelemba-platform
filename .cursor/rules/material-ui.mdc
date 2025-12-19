@@ -1,0 +1,266 @@
+---
+name: material-ui
+description: Material-UI (MUI) best practices and coding standards for React components
+globs: ["**/*.{jsx,tsx}", "**/components/**", "**/ui/**"]
+alwaysApply: false
+---
+
+# Material-UI (MUI) Best Practices
+
+## Core Principles
+
+- Use Material-UI v5+ (MUI) components and patterns
+- Prefer `sx` prop for styling over `styled` components when possible
+- Use `Box` component for layout instead of plain `div` elements
+- Leverage the theme system for consistent design tokens
+- Ensure accessibility with proper ARIA attributes
+
+## Component Usage
+
+### Layout Components
+
+```tsx
+// ✅ DO: Use Box for layout
+import { Box } from '@mui/material';
+
+<Box sx={{ display: 'flex', gap: 2 }}>
+  <Box>Content</Box>
+</Box>
+
+// ❌ DON'T: Use plain divs
+<div style={{ display: 'flex' }}>
+  <div>Content</div>
+</div>
+```
+
+### Styling with sx Prop
+
+```tsx
+// ✅ DO: Use sx prop for styling
+<Box
+  sx={{
+    p: 2,
+    bgcolor: 'background.paper',
+    borderRadius: 1,
+    boxShadow: 1,
+  }}
+>
+
+// ✅ DO: Use theme breakpoints
+<Box
+  sx={{
+    width: { xs: '100%', sm: '50%', md: '33%' },
+  }}
+>
+
+// ❌ DON'T: Use inline styles
+<Box style={{ padding: 16, backgroundColor: '#fff' }}>
+```
+
+### Theming
+
+```tsx
+// ✅ DO: Use theme values
+<Box sx={{ color: 'primary.main', bgcolor: 'background.default' }}>
+
+// ✅ DO: Use theme spacing
+<Box sx={{ p: 2, m: 1 }}> // p: 2 = theme.spacing(2)
+
+// ❌ DON'T: Hardcode values
+<Box sx={{ padding: '16px', margin: '8px' }}>
+```
+
+## Component Patterns
+
+### Forms
+
+```tsx
+// ✅ DO: Use MUI form components
+import { TextField, Button, Stack } from '@mui/material';
+
+<Stack spacing={2}>
+  <TextField
+    label="Email"
+    type="email"
+    required
+    fullWidth
+  />
+  <Button variant="contained" type="submit">
+    Submit
+  </Button>
+</Stack>
+```
+
+### Navigation
+
+```tsx
+// ✅ DO: Use AppBar and Toolbar
+import { AppBar, Toolbar, Typography, Button } from '@mui/material';
+
+<AppBar position="static">
+  <Toolbar>
+    <Typography variant="h6" sx={{ flexGrow: 1 }}>
+      App Title
+    </Typography>
+    <Button color="inherit">Login</Button>
+  </Toolbar>
+</AppBar>
+```
+
+### Cards
+
+```tsx
+// ✅ DO: Use Card components
+import { Card, CardContent, CardActions, CardHeader } from '@mui/material';
+
+<Card>
+  <CardHeader title="Card Title" subheader="Subtitle" />
+  <CardContent>
+    Content here
+  </CardContent>
+  <CardActions>
+    <Button size="small">Action</Button>
+  </CardActions>
+</Card>
+```
+
+## Responsive Design
+
+```tsx
+// ✅ DO: Use responsive breakpoints
+<Box
+  sx={{
+    display: { xs: 'block', md: 'flex' },
+    flexDirection: { md: 'row' },
+    gap: { xs: 1, md: 2 },
+  }}
+>
+
+// ✅ DO: Use Grid for responsive layouts
+import { Grid } from '@mui/material';
+
+<Grid container spacing={2}>
+  <Grid item xs={12} sm={6} md={4}>
+    Content
+  </Grid>
+</Grid>
+```
+
+## Typography
+
+```tsx
+// ✅ DO: Use Typography component
+import { Typography } from '@mui/material';
+
+<Typography variant="h1" component="h1">
+  Heading
+</Typography>
+<Typography variant="body1" color="text.secondary">
+  Body text
+</Typography>
+
+// ❌ DON'T: Use plain HTML tags
+<h1>Heading</h1>
+<p>Body text</p>
+```
+
+## Icons
+
+```tsx
+// ✅ DO: Use MUI icons
+import { IconButton } from '@mui/material';
+import { Delete, Edit, Add } from '@mui/icons-material';
+
+<IconButton color="primary" aria-label="delete">
+  <Delete />
+</IconButton>
+```
+
+## Accessibility
+
+```tsx
+// ✅ DO: Include ARIA labels
+<IconButton aria-label="Close dialog">
+  <Close />
+</IconButton>
+
+// ✅ DO: Use semantic HTML with proper roles
+<Button
+  aria-label="Submit form"
+  aria-describedby="form-description"
+>
+  Submit
+</Button>
+
+// ✅ DO: Ensure keyboard navigation
+<Button
+  onKeyDown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      handleClick();
+    }
+  }}
+>
+```
+
+## Performance
+
+```tsx
+// ✅ DO: Use lazy loading for heavy components
+import { lazy, Suspense } from 'react';
+import { CircularProgress } from '@mui/material';
+
+const HeavyComponent = lazy(() => import('./HeavyComponent'));
+
+<Suspense fallback={<CircularProgress />}>
+  <HeavyComponent />
+</Suspense>
+
+// ✅ DO: Memoize expensive components
+import { memo } from 'react';
+
+const ExpensiveComponent = memo(({ data }) => {
+  // Component logic
+});
+```
+
+## State Management with MUI
+
+```tsx
+// ✅ DO: Use MUI's useTheme hook
+import { useTheme } from '@mui/material/styles';
+
+const theme = useTheme();
+const isDark = theme.palette.mode === 'dark';
+
+// ✅ DO: Use MUI's useMediaQuery
+import { useMediaQuery } from '@mui/material';
+
+const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+```
+
+## Error Handling
+
+```tsx
+// ✅ DO: Use Alert for error messages
+import { Alert, AlertTitle } from '@mui/material';
+
+{error && (
+  <Alert severity="error">
+    <AlertTitle>Error</AlertTitle>
+    {error.message}
+  </Alert>
+)}
+```
+
+## Best Practices Summary
+
+1. **Always use MUI components** instead of HTML elements when available
+2. **Prefer `sx` prop** for styling over `styled` components for simple cases
+3. **Use theme tokens** (colors, spacing, typography) from the theme
+4. **Implement responsive design** using breakpoints
+5. **Ensure accessibility** with proper ARIA attributes
+6. **Follow Material Design guidelines** for component usage
+7. **Use TypeScript** for type safety with MUI components
+8. **Leverage the theme system** for consistent design
+9. **Optimize performance** with lazy loading and memoization
+10. **Test components** with MUI's testing utilities

@@ -1,0 +1,904 @@
+---
+description: Comprehensive rules for deploying to GitHub and Heroku - Git workflow, Heroku setup, environment variables, database migrations, and deployment procedures
+globs: 
+  - "Procfile"
+  - "backend/Procfile"
+  - "railway.toml"
+  - "railway.json"
+  - ".gitignore"
+  - "package.json"
+  - "backend/package.json"
+alwaysApply: true
+---
+
+# GitHub & Heroku Deployment Rules
+
+<author>MuntuShop Development Team</author>
+<version>1.0.0</version>
+
+## Context
+
+- Complete deployment guide for GitHub and Heroku
+- Covers Git workflow, Heroku setup, environment variables, database migrations, webhooks, and monitoring
+- Based on production deployment patterns from MuntuShop platform
+- Ensures secure, reliable, and maintainable deployments
+
+---
+
+## 📦 Git & GitHub Rules
+
+### Repository Setup
+
+#### ✅ REQUIRED: Initialize Git Repository
+
+**ALWAYS** initialize and configure Git properly:
+
+```bash
+# ✅ DO: Initialize repository
+git init
+
+# ✅ DO: Set default branch to main
+git branch -M main
+
+# ✅ DO: Add remote origin
+git remote add origin https://github.com/your-org/your-repo.git
+
+# ✅ DO: Verify remote
+git remote -v
+```
+
+#### ✅ REQUIRED: .gitignore Configuration
+
+**ALWAYS** create comprehensive `.gitignore`:
+
+```gitignore
+# ✅ DO: Include these in .gitignore
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+backend/node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build files
+dist/
+build/
+*.tgz
+
+# Database
+*.sqlite
+*.db
+
+# Secrets
+*.pem
+*.key
+secrets/
+
+# Heroku
+.heroku/
+```
+
+#### ✅ REQUIRED: Git Workflow Pattern
+
+**ALWAYS** follow this Git workflow:
+
+```bash
+# ✅ DO: Standard workflow
+# 1. Check current status
+git status
+
+# 2. Add changes
+git add .
+
+# 3. Commit with descriptive message
+git commit -m "feat: add new feature description"
+
+# 4. Push to GitHub
+git push origin main
+
+# 5. Deploy to Heroku
+git push heroku main
+```
+
+#### ✅ REQUIRED: Commit Message Format
+
+**ALWAYS** use conventional commit format:
+
+```bash
+# ✅ DO: Conventional commits
+git commit -m "feat: add shopping cart functionality"
+git commit -m "fix: resolve payment webhook issue"
+git commit -m "docs: update API documentation"
+git commit -m "refactor: reorganize service structure"
+git commit -m "chore: update dependencies"
+git commit -m "test: add unit tests for payment service"
+
+# ❌ DON'T: Vague commit messages
+git commit -m "update"
+git commit -m "fix bug"
+git commit -m "changes"
+```
+
+#### ✅ REQUIRED: Branch Strategy
+
+**ALWAYS** use proper branch strategy:
+
+```bash
+# ✅ DO: Feature branches
+git checkout -b feature/shopping-cart
+# ... make changes ...
+git commit -m "feat: implement shopping cart"
+git push origin feature/shopping-cart
+# Create PR, review, merge to main
+
+# ✅ DO: Hotfix branches
+git checkout -b hotfix/payment-bug
+# ... fix bug ...
+git commit -m "fix: resolve payment processing bug"
+git push origin hotfix/payment-bug
+# Merge to main and deploy immediately
+```
+
+---
+
+## 🚀 Heroku Setup Rules
+
+### Heroku App Creation
+
+#### ✅ REQUIRED: Create Heroku App
+
+**ALWAYS** create Heroku app with proper naming:
+
+```bash
+# ✅ DO: Create app with descriptive name
+heroku create muntushop-production
+
+# ✅ DO: Verify app creation
+heroku apps:info muntushop-production
+
+# ✅ DO: Set region (if needed)
+heroku apps:create muntushop-production --region us
+```
+
+#### ✅ REQUIRED: Add Heroku Remote
+
+**ALWAYS** add Heroku remote:
+
+```bash
+# ✅ DO: Add Heroku remote
+heroku git:remote -a muntushop-production
+
+# ✅ DO: Verify remotes
+git remote -v
+# Should show:
+# origin    https://github.com/your-org/repo.git (fetch)
+# origin    https://github.com/your-org/repo.git (push)
+# heroku    https://git.heroku.com/muntushop-production.git (fetch)
+# heroku    https://git.heroku.com/muntushop-production.git (push)
+```
+
+#### ✅ REQUIRED: Procfile Configuration
+
+**ALWAYS** create proper Procfile:
+
+```bash
+# ✅ DO: Root Procfile (if deploying from root)
+# Procfile
+web: cd backend && npm install && npm start
+
+# ✅ DO: Backend Procfile (if deploying backend directly)
+# backend/Procfile
+web: node src/app.js
+```
+
+**ALWAYS** verify Procfile syntax:
+
+```bash
+# ✅ DO: Test Procfile locally
+foreman start
+# or
+heroku local web
+```
+
+---
+
+## 🔐 Environment Variables Rules
+
+### Environment Variable Management
+
+#### ✅ REQUIRED: Set All Required Variables
+
+**ALWAYS** set all required environment variables on Heroku:
+
+```bash
+# ✅ DO: Set variables one by one
+heroku config:set DATABASE_URL=postgresql://... --app muntushop-production
+heroku config:set GREEN_ID_INSTANCE=your_instance_id --app muntushop-production
+heroku config:set GREEN_API_TOKEN_INSTANCE=your_token --app muntushop-production
+heroku config:set STRIPE_SECRET_KEY=sk_live_... --app muntushop-production
+heroku config:set STRIPE_WEBHOOK_SECRET=whsec_... --app muntushop-production
+heroku config:set JWT_SECRET=your-secret-key --app muntushop-production
+heroku config:set NODE_ENV=production --app muntushop-production
+heroku config:set PORT=3000 --app muntushop-production
+
+# ✅ DO: Set multiple variables at once
+heroku config:set \
+  GREEN_ID_INSTANCE=your_id \
+  GREEN_API_TOKEN_INSTANCE=your_token \
+  NODE_ENV=production \
+  --app muntushop-production
+```
+
+#### ✅ REQUIRED: Verify Environment Variables
+
+**ALWAYS** verify all variables are set:
+
+```bash
+# ✅ DO: List all config vars
+heroku config --app muntushop-production
+
+# ✅ DO: Check specific variable
+heroku config:get DATABASE_URL --app muntushop-production
+
+# ✅ DO: Verify in code (for debugging)
+heroku run node -e "console.log(process.env.DATABASE_URL)" --app muntushop-production
+```
+
+#### ✅ REQUIRED: Environment Variable Checklist
+
+**ALWAYS** verify these variables are set:
+
+```bash
+# Database
+✅ DATABASE_URL
+
+# Green API (WhatsApp)
+✅ GREEN_ID_INSTANCE
+✅ GREEN_API_TOKEN_INSTANCE
+✅ GREEN_PHONE (optional)
+
+# Stripe
+✅ STRIPE_SECRET_KEY
+✅ STRIPE_WEBHOOK_SECRET
+✅ STRIPE_PUBLISHABLE_KEY
+
+# Authentication
+✅ JWT_SECRET
+
+# Application
+✅ NODE_ENV=production
+✅ PORT=3000
+
+# URLs
+✅ FRONTEND_URL (if applicable)
+✅ BACKEND_URL (if applicable)
+
+# Optional Services
+✅ OPENAI_API_KEY (for AI Agent)
+✅ IPTV_ACCOUNT (for IPTV service)
+✅ IPTV_PASSWORD (for IPTV service)
+✅ IPTV_M3U_URL (for IPTV service)
+```
+
+#### ✅ REQUIRED: Never Commit Secrets
+
+**ALWAYS** use `.env.example` for documentation:
+
+```bash
+# ✅ DO: Create .env.example
+# .env.example
+DATABASE_URL=postgresql://user:pass@host:port/db
+GREEN_ID_INSTANCE=your_instance_id
+GREEN_API_TOKEN_INSTANCE=your_token
+STRIPE_SECRET_KEY=sk_test_xxxxx
+STRIPE_WEBHOOK_SECRET=whsec_xxxxx
+JWT_SECRET=your-secret-key
+NODE_ENV=development
+PORT=3000
+
+# ❌ DON'T: Commit actual .env file
+# .env should be in .gitignore
+```
+
+---
+
+## 🗄️ Database Setup Rules
+
+### PostgreSQL Configuration
+
+#### ✅ REQUIRED: Add PostgreSQL Add-on
+
+**ALWAYS** add PostgreSQL to Heroku app:
+
+```bash
+# ✅ DO: Add PostgreSQL (Hobby Dev - Free tier)
+heroku addons:create heroku-postgresql:hobby-dev --app muntushop-production
+
+# ✅ DO: Add PostgreSQL (Standard tier - Production)
+heroku addons:create heroku-postgresql:standard-0 --app muntushop-production
+
+# ✅ DO: Verify PostgreSQL is added
+heroku addons --app muntushop-production
+```
+
+#### ✅ REQUIRED: Run Database Migrations
+
+**ALWAYS** run migrations after deployment:
+
+```bash
+# ✅ DO: Run main schema
+heroku run psql $DATABASE_URL -f backend/database/schema.sql --app muntushop-production
+
+# ✅ DO: Run specific migration
+heroku run psql $DATABASE_URL -f database/migrations/add_ai_agent_conversation_history.sql --app muntushop-production
+
+# ✅ DO: Run all migrations
+heroku run bash --app muntushop-production
+# Then in bash:
+for file in database/migrations/*.sql; do
+  psql $DATABASE_URL -f "$file"
+done
+```
+
+#### ✅ REQUIRED: Verify Database Connection
+
+**ALWAYS** verify database connection:
+
+```bash
+# ✅ DO: Test database connection
+heroku run node -e "
+  const { Pool } = require('pg');
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  pool.query('SELECT version()', (err, res) => {
+    if (err) console.error(err);
+    else console.log('Database connected:', res.rows[0].version);
+    pool.end();
+  });
+" --app muntushop-production
+
+# ✅ DO: Check database info
+heroku pg:info --app muntushop-production
+
+# ✅ DO: Connect to database
+heroku pg:psql --app muntushop-production
+```
+
+#### ✅ REQUIRED: Database Backup
+
+**ALWAYS** backup database before migrations:
+
+```bash
+# ✅ DO: Create backup
+heroku pg:backups:capture --app muntushop-production
+
+# ✅ DO: List backups
+heroku pg:backups --app muntushop-production
+
+# ✅ DO: Download backup
+heroku pg:backups:download --app muntushop-production
+```
+
+---
+
+## 📡 Webhook Configuration Rules
+
+### Green API Webhook Setup
+
+#### ✅ REQUIRED: Configure Green API Webhook
+
+**ALWAYS** set webhook URL in Green API dashboard:
+
+1. **Get Heroku App URL:**
+   ```bash
+   heroku info --app muntushop-production
+   # Note the Web URL: https://muntushop-production-xxx.herokuapp.com
+   ```
+
+2. **Set Webhook URL:**
+   - Go to: https://console.green-api.com/
+   - Select your instance
+   - Navigate to "Webhook Settings"
+   - Set webhook URL: `https://muntushop-production-xxx.herokuapp.com/webhooks/greenapi`
+   - Enable webhook types:
+     - ✅ `incomingMessageReceived`
+     - ✅ `outgoingMessageStatus`
+     - ✅ `deviceStatus`
+
+3. **Verify Webhook:**
+   ```bash
+   # Test webhook endpoint
+   curl -X POST https://muntushop-production-xxx.herokuapp.com/webhooks/greenapi \
+     -H "Content-Type: application/json" \
+     -d '{"typeWebhook":"incomingMessageReceived","senderData":{"sender":"test@c.us"},"messageData":{"textMessageData":{"textMessage":"test"}}}'
+   ```
+
+### Stripe Webhook Setup
+
+#### ✅ REQUIRED: Configure Stripe Webhook
+
+**ALWAYS** set Stripe webhook:
+
+1. **Get Webhook URL:**
+   ```
+   https://muntushop-production-xxx.herokuapp.com/webhooks/stripe
+   ```
+
+2. **Create Webhook in Stripe Dashboard:**
+   - Go to: https://dashboard.stripe.com/webhooks
+   - Click "Add endpoint"
+   - Enter webhook URL
+   - Select events:
+     - ✅ `checkout.session.completed`
+     - ✅ `checkout.session.expired`
+     - ✅ `payment_intent.succeeded`
+     - ✅ `charge.dispute.created`
+     - ✅ `charge.refunded`
+
+3. **Copy Webhook Secret:**
+   - Click on the webhook
+   - Click "Reveal" next to "Signing secret"
+   - Copy the secret (starts with `whsec_...`)
+
+4. **Set Webhook Secret on Heroku:**
+   ```bash
+   heroku config:set STRIPE_WEBHOOK_SECRET=whsec_xxx... --app muntushop-production
+   ```
+
+---
+
+## 🚢 Deployment Process Rules
+
+### Pre-Deployment Checklist
+
+#### ✅ REQUIRED: Pre-Deployment Verification
+
+**ALWAYS** verify before deploying:
+
+```bash
+# ✅ DO: Pre-deployment checklist
+# 1. Check Git status
+git status
+# Should be clean or have committed changes
+
+# 2. Verify all tests pass (if applicable)
+npm test
+
+# 3. Check environment variables
+heroku config --app muntushop-production
+
+# 4. Verify database is connected
+heroku pg:info --app muntushop-production
+
+# 5. Check Procfile exists
+cat Procfile
+# or
+cat backend/Procfile
+
+# 6. Verify package.json has start script
+cat backend/package.json | grep '"start"'
+
+# 7. Check .gitignore excludes sensitive files
+cat .gitignore | grep -E "\.env|node_modules"
+```
+
+### Deployment Steps
+
+#### ✅ REQUIRED: Standard Deployment Process
+
+**ALWAYS** follow this deployment process:
+
+```bash
+# ✅ DO: Step-by-step deployment
+
+# Step 1: Commit all changes
+git add .
+git commit -m "feat: description of changes"
+
+# Step 2: Push to GitHub
+git push origin main
+
+# Step 3: Deploy to Heroku
+git push heroku main
+
+# Step 4: Monitor build logs
+heroku logs --tail --app muntushop-production
+
+# Step 5: Verify deployment
+heroku open --app muntushop-production
+# Or test health endpoint
+curl https://muntushop-production-xxx.herokuapp.com/health
+```
+
+#### ✅ REQUIRED: Deployment with Migrations
+
+**ALWAYS** run migrations after deployment:
+
+```bash
+# ✅ DO: Deploy then migrate
+git push heroku main
+
+# Wait for deployment to complete, then:
+heroku run psql $DATABASE_URL -f backend/database/schema.sql --app muntushop-production
+
+# Or run migrations via one-off dyno
+heroku run bash --app muntushop-production
+# Then run migrations in bash
+```
+
+#### ✅ REQUIRED: Verify Deployment
+
+**ALWAYS** verify deployment success:
+
+```bash
+# ✅ DO: Check app status
+heroku ps --app muntushop-production
+# Should show: web.1: up
+
+# ✅ DO: Test health endpoint
+curl https://muntushop-production-xxx.herokuapp.com/health
+
+# ✅ DO: Check logs for errors
+heroku logs --tail --app muntushop-production
+
+# ✅ DO: Test webhook endpoints
+curl -X POST https://muntushop-production-xxx.herokuapp.com/webhooks/greenapi \
+  -H "Content-Type: application/json" \
+  -d '{"typeWebhook":"test"}'
+```
+
+---
+
+## 🔄 GitHub Integration Rules
+
+### Automatic Deployment Setup
+
+#### ✅ REQUIRED: Connect GitHub to Heroku
+
+**ALWAYS** set up automatic deployment:
+
+1. **Via Heroku Dashboard:**
+   - Go to: https://dashboard.heroku.com/apps/muntushop-production
+   - Click "Deploy" tab
+   - Under "Deployment method", click "Connect to GitHub"
+   - Authorize Heroku to access GitHub
+   - Search for repository: `your-org/your-repo`
+   - Click "Connect"
+
+2. **Enable Automatic Deploys:**
+   - Scroll to "Automatic deploys"
+   - Select branch: `main`
+   - Check "Wait for CI to pass" (if using CI)
+   - Click "Enable Automatic Deploys"
+
+3. **Manual Deploy (Optional):**
+   - Click "Deploy Branch" to deploy immediately
+
+#### ✅ REQUIRED: Verify GitHub Integration
+
+**ALWAYS** verify integration works:
+
+```bash
+# ✅ DO: Test automatic deployment
+# 1. Make a small change
+echo "// test" >> backend/src/app.js
+
+# 2. Commit and push
+git add .
+git commit -m "test: verify auto-deployment"
+git push origin main
+
+# 3. Check Heroku dashboard
+# Should see automatic deployment starting
+```
+
+---
+
+## 📊 Monitoring & Logging Rules
+
+### Log Management
+
+#### ✅ REQUIRED: View Logs
+
+**ALWAYS** monitor logs during and after deployment:
+
+```bash
+# ✅ DO: View real-time logs
+heroku logs --tail --app muntushop-production
+
+# ✅ DO: View recent logs
+heroku logs -n 100 --app muntushop-production
+
+# ✅ DO: View specific dyno logs
+heroku logs --dyno web.1 --app muntushop-production
+
+# ✅ DO: Filter logs
+heroku logs --tail --app muntushop-production | grep "error"
+heroku logs --tail --app muntushop-production | grep "webhook"
+```
+
+#### ✅ REQUIRED: Set Up Log Drains
+
+**ALWAYS** configure log drains for production:
+
+```bash
+# ✅ DO: Add log drain (example: Papertrail)
+heroku drains:add https://your-papertrail-url --app muntushop-production
+
+# ✅ DO: List log drains
+heroku drains --app muntushop-production
+```
+
+### Application Monitoring
+
+#### ✅ REQUIRED: Monitor Application Metrics
+
+**ALWAYS** monitor application health:
+
+```bash
+# ✅ DO: Check dyno status
+heroku ps --app muntushop-production
+
+# ✅ DO: Check app info
+heroku info --app muntushop-production
+
+# ✅ DO: Monitor database
+heroku pg:info --app muntushop-production
+heroku pg:stats --app muntushop-production
+
+# ✅ DO: Check add-ons
+heroku addons --app muntushop-production
+```
+
+---
+
+## 🔙 Rollback Rules
+
+### Rollback Procedures
+
+#### ✅ REQUIRED: Rollback Process
+
+**ALWAYS** know how to rollback:
+
+```bash
+# ✅ DO: View release history
+heroku releases --app muntushop-production
+
+# ✅ DO: Rollback to previous release
+heroku releases:rollback --app muntushop-production
+
+# ✅ DO: Rollback to specific release
+heroku releases:rollback v42 --app muntushop-production
+
+# ✅ DO: Verify rollback
+heroku logs --tail --app muntushop-production
+curl https://muntushop-production-xxx.herokuapp.com/health
+```
+
+#### ✅ REQUIRED: Database Rollback
+
+**ALWAYS** have database rollback plan:
+
+```bash
+# ✅ DO: Restore database from backup
+heroku pg:backups:restore BACKUP_ID DATABASE_URL --app muntushop-production
+
+# ✅ DO: List available backups
+heroku pg:backups --app muntushop-production
+```
+
+---
+
+## 🔒 Security Rules
+
+### Security Best Practices
+
+#### ✅ REQUIRED: Security Checklist
+
+**ALWAYS** follow security best practices:
+
+```bash
+# ✅ DO: Use HTTPS (automatic on Heroku)
+# All Heroku apps use HTTPS by default
+
+# ✅ DO: Set secure JWT secret
+heroku config:set JWT_SECRET=$(openssl rand -base64 32) --app muntushop-production
+
+# ✅ DO: Enable maintenance mode for updates
+heroku maintenance:on --app muntushop-production
+# ... perform updates ...
+heroku maintenance:off --app muntushop-production
+
+# ✅ DO: Review config vars regularly
+heroku config --app muntushop-production
+
+# ✅ DO: Rotate secrets periodically
+# Update STRIPE_SECRET_KEY, JWT_SECRET, etc.
+```
+
+#### ✅ REQUIRED: Access Control
+
+**ALWAYS** control access to Heroku app:
+
+```bash
+# ✅ DO: List collaborators
+heroku access --app muntushop-production
+
+# ✅ DO: Add collaborator
+heroku access:add collaborator@example.com --app muntushop-production
+
+# ✅ DO: Remove collaborator
+heroku access:remove collaborator@example.com --app muntushop-production
+
+# ✅ DO: Set permissions
+heroku access:update collaborator@example.com --permissions deploy,operate,manage --app muntushop-production
+```
+
+---
+
+## 📋 Deployment Checklist
+
+### Complete Deployment Checklist
+
+#### ✅ REQUIRED: Pre-Deployment
+
+- [ ] All code committed to Git
+- [ ] All tests passing (if applicable)
+- [ ] Environment variables documented in `.env.example`
+- [ ] `.gitignore` excludes sensitive files
+- [ ] `Procfile` exists and is correct
+- [ ] `package.json` has correct start script
+- [ ] Database migrations tested locally
+- [ ] Webhook URLs documented
+
+#### ✅ REQUIRED: Heroku Setup
+
+- [ ] Heroku app created
+- [ ] Heroku remote added
+- [ ] PostgreSQL add-on added
+- [ ] All environment variables set
+- [ ] Webhook URLs configured (Green API, Stripe)
+- [ ] GitHub integration connected (optional)
+- [ ] Automatic deploys enabled (optional)
+
+#### ✅ REQUIRED: Deployment
+
+- [ ] Code pushed to GitHub
+- [ ] Code deployed to Heroku
+- [ ] Build completed successfully
+- [ ] Database migrations run
+- [ ] Health endpoint responding
+- [ ] Webhook endpoints tested
+- [ ] Application logs checked
+- [ ] No errors in logs
+
+#### ✅ REQUIRED: Post-Deployment
+
+- [ ] Health check passes
+- [ ] Webhook receiving messages
+- [ ] Database queries working
+- [ ] Services responding correctly
+- [ ] Monitoring configured
+- [ ] Documentation updated
+- [ ] Team notified of deployment
+
+---
+
+## 🛠️ Troubleshooting Rules
+
+### Common Deployment Issues
+
+#### Issue: Build Fails
+
+**Solutions:**
+
+```bash
+# ✅ DO: Check build logs
+heroku logs --tail --app muntushop-production
+
+# ✅ DO: Check for missing dependencies
+# Verify package.json has all required dependencies
+
+# ✅ DO: Check Node version
+heroku config:get NODE_ENV --app muntushop-production
+# Set if needed:
+heroku config:set NODE_ENV=production --app muntushop-production
+```
+
+#### Issue: Application Crashes
+
+**Solutions:**
+
+```bash
+# ✅ DO: Check crash logs
+heroku logs --tail --app muntushop-production
+
+# ✅ DO: Check environment variables
+heroku config --app muntushop-production
+
+# ✅ DO: Restart dynos
+heroku restart --app muntushop-production
+
+# ✅ DO: Check database connection
+heroku pg:info --app muntushop-production
+```
+
+#### Issue: Webhook Not Receiving
+
+**Solutions:**
+
+```bash
+# ✅ DO: Verify webhook URL in Green API/Stripe dashboard
+# ✅ DO: Check webhook endpoint is accessible
+curl -X POST https://muntushop-production-xxx.herokuapp.com/webhooks/greenapi
+
+# ✅ DO: Check logs for webhook errors
+heroku logs --tail --app muntushop-production | grep webhook
+
+# ✅ DO: Verify webhook secret (for Stripe)
+heroku config:get STRIPE_WEBHOOK_SECRET --app muntushop-production
+```
+
+---
+
+## 📚 Best Practices Summary
+
+### ✅ DO:
+
+1. **Always commit before deploying**
+2. **Always verify environment variables**
+3. **Always run database migrations after deployment**
+4. **Always test webhook endpoints**
+5. **Always monitor logs after deployment**
+6. **Always backup database before migrations**
+7. **Always use conventional commit messages**
+8. **Always verify deployment success**
+9. **Always document deployment process**
+10. **Always have rollback plan ready**
+
+### ❌ DON'T:
+
+1. **Don't deploy without testing locally**
+2. **Don't skip database migrations**
+3. **Don't commit sensitive data**
+4. **Don't deploy on Friday evening**
+5. **Don't skip pre-deployment checklist**
+6. **Don't ignore build warnings**
+7. **Don't deploy without backup**
+8. **Don't skip post-deployment verification**
+9. **Don't use vague commit messages**
+10. **Don't deploy without monitoring**
+
+---
+
+## 🔗 Related Documentation
+
+- **Heroku Documentation**: https://devcenter.heroku.com/
+- **Git Documentation**: https://git-scm.com/doc
+- **GitHub Documentation**: https://docs.github.com/
+- **Green API Documentation**: https://green-api.com/en/docs/
+- **Stripe Webhooks**: https://stripe.com/docs/webhooks
+
+---
+
+**Last Updated**: December 19, 2024  
+**Version**: 1.0.0  
+**Status**: Active  
+**Based on**: MuntuShop Platform Production Deployment

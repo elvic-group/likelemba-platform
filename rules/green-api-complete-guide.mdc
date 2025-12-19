@@ -1,0 +1,1443 @@
+---
+description: Complete step-by-step guide for using Green API in the project - setup, account management, sending/receiving messages, webhooks, groups, statuses, and all API methods
+globs: 
+  - "backend/src/config/greenapi.js"
+  - "backend/src/services/greenapi/**/*.js"
+  - "backend/src/routes/webhooks/**/*.js"
+  - "backend/src/services/**/*.js"
+alwaysApply: true
+---
+
+# Green API Complete Usage Guide
+
+<author>MuntuShop Development Team</author>
+<version>1.0.0</version>
+
+## Context
+
+- Complete step-by-step guide for using Green API in WhatsApp business platforms
+- Based on official Green API documentation: https://green-api.com/en/docs/
+- Covers all API methods: Account, Sending, Receiving, Groups, Statuses, Service Methods
+- Includes webhook handling, error management, rate limiting, and best practices
+- Production-tested patterns from MuntuShop platform
+
+---
+
+## 📚 Table of Contents
+
+1. [Getting Started](#getting-started)
+2. [Account Management](#account-management)
+3. [Sending Messages](#sending-messages)
+4. [Receiving Messages & Webhooks](#receiving-messages--webhooks)
+5. [Groups Management](#groups-management)
+6. [Statuses](#statuses)
+7. [Service Methods](#service-methods)
+8. [Queues Management](#queues-management)
+9. [Journals & History](#journals--history)
+10. [Read Marks](#read-marks)
+11. [Error Handling](#error-handling)
+12. [Rate Limiting](#rate-limiting)
+13. [Integration Best Practices](#integration-best-practices)
+
+---
+
+## 🚀 Getting Started
+
+### Step 1: Registration & Instance Creation
+
+#### ✅ REQUIRED: Create Green API Account
+
+**ALWAYS** register and create instance:
+
+1. **Register Account:**
+   - Go to: https://console.green-api.com/
+   - Click "Registration"
+   - Complete registration form
+   - Verify email
+
+2. **Create Instance:**
+   - Login to console
+   - Click "Create Instance"
+   - Choose plan (Developer/Start/Business)
+   - Note your `idInstance` and `apiTokenInstance`
+
+#### ✅ REQUIRED: Install SDK
+
+**ALWAYS** install Green API SDK:
+
+```bash
+# ✅ DO: Install Node.js SDK
+npm install @green-api/whatsapp-api-client
+
+# Verify installation
+npm list @green-api/whatsapp-api-client
+```
+
+#### ✅ REQUIRED: Configure Client
+
+**ALWAYS** configure client properly:
+
+```javascript
+// backend/src/config/greenapi.js
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../../.env') });
+const whatsAppClient = require('@green-api/whatsapp-api-client');
+
+const idInstance = process.env.GREEN_ID_INSTANCE;
+const apiTokenInstance = process.env.GREEN_API_TOKEN_INSTANCE;
+
+if (!idInstance || !apiTokenInstance) {
+  console.error('❌ Green API credentials missing!');
+  // Return dummy object to prevent crashes
+  module.exports = {
+    message: {
+      sendMessage: async () => {
+        console.warn('⚠️ Green API not configured');
+      }
+    }
+  };
+} else {
+  const restAPI = whatsAppClient.restAPI({
+    idInstance: idInstance,
+    apiTokenInstance: apiTokenInstance,
+  });
+  module.exports = restAPI;
+}
+```
+
+**Reference:** [Green API Documentation](https://green-api.com/en/docs/)
+
+---
+
+## 🔐 Account Management
+
+### Instance Settings
+
+#### ✅ REQUIRED: Get Instance Settings
+
+**ALWAYS** retrieve instance settings:
+
+```javascript
+// ✅ DO: Get instance settings
+const greenAPI = require('../config/greenapi');
+
+async function getInstanceSettings() {
+  try {
+    const response = await greenAPI.account.getSettings();
+    console.log('Instance settings:', response);
+    return response;
+  } catch (error) {
+    console.error('Error getting settings:', error);
+    throw error;
+  }
+}
+
+// Response structure:
+// {
+//   "delaySendMessagesMilliseconds": 1000,
+//   "markIncomingMessagesReaded": "yes",
+//   "incomingWebhook": "yes",
+//   "outgoingWebhook": "yes",
+//   "stateWebhook": "yes",
+//   "incomingWebhookUrl": "https://your-url.com/webhook",
+//   ...
+// }
+```
+
+**Reference:** [Get Settings API](https://green-api.com/en/docs/api/account/GetSettings/)
+
+#### ✅ REQUIRED: Set Instance Settings
+
+**ALWAYS** configure settings properly:
+
+```javascript
+// ✅ DO: Set instance settings
+async function setInstanceSettings() {
+  try {
+    const response = await greenAPI.account.setSettings({
+      delaySendMessagesMilliseconds: 12000, // 12 seconds between messages
+      markIncomingMessagesReaded: "yes",
+      incomingWebhook: "yes",
+      outgoingWebhook: "yes",
+      stateWebhook: "yes",
+      incomingWebhookUrl: "https://your-domain.com/webhooks/greenapi"
+    });
+    console.log('Settings updated:', response);
+    return response;
+  } catch (error) {
+    console.error('Error setting settings:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Set Settings API](https://green-api.com/en/docs/api/account/SetSettings/)
+
+### Instance State
+
+#### ✅ REQUIRED: Check Instance State
+
+**ALWAYS** monitor instance state:
+
+```javascript
+// ✅ DO: Get instance state
+async function getInstanceState() {
+  try {
+    const response = await greenAPI.account.getStateInstance();
+    console.log('Instance state:', response);
+    
+    // Possible states:
+    // "authorized" - Ready to use
+    // "notAuthorized" - Not authorized
+    // "blocked" - Account blocked
+    // "sleepMode" - Sleep mode
+    // "starting" - Starting up
+    
+    return response.stateInstance;
+  } catch (error) {
+    console.error('Error getting state:', error);
+    throw error;
+  }
+}
+
+// ✅ DO: Monitor state regularly
+setInterval(async () => {
+  const state = await getInstanceState();
+  if (state !== "authorized") {
+    console.error(`⚠️ Instance state changed: ${state}`);
+    // Handle state change
+  }
+}, 60000); // Check every minute
+```
+
+**Reference:** [Get State API](https://green-api.com/en/docs/api/account/GetStateInstance/)
+
+### Authorization
+
+#### ✅ REQUIRED: Get QR Code
+
+**ALWAYS** get QR code for initial authorization:
+
+```javascript
+// ✅ DO: Get QR code
+async function getQRCode() {
+  try {
+    const response = await greenAPI.account.getQRCode();
+    console.log('QR Code:', response.qrCode);
+    // Display QR code to user
+    // User scans with WhatsApp to authorize
+    return response.qrCode;
+  } catch (error) {
+    console.error('Error getting QR code:', error);
+    throw error;
+  }
+}
+
+// ✅ DO: Get QR code via WebSocket (real-time)
+// Reference: https://green-api.com/en/docs/api/account/GetQRCodeViaWebSocket/
+```
+
+**Reference:** [Get QR Code API](https://green-api.com/en/docs/api/account/GetQRCode/)
+
+#### ✅ REQUIRED: Link with Phone Number
+
+**ALWAYS** support phone number linking:
+
+```javascript
+// ✅ DO: Link with phone number
+async function linkWithPhone(phoneNumber) {
+  try {
+    const response = await greenAPI.account.linkWithPhoneNumber({
+      phoneNumber: phoneNumber // Format: 1234567890
+    });
+    console.log('Link response:', response);
+    return response;
+  } catch (error) {
+    console.error('Error linking phone:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Link with Phone API](https://green-api.com/en/docs/api/account/LinkWithPhoneNumber/)
+
+---
+
+## 📤 Sending Messages
+
+### Text Messages
+
+#### ✅ REQUIRED: Send Text Message
+
+**ALWAYS** use proper format for sending:
+
+```javascript
+// ✅ DO: Send text message
+const greenAPI = require('../config/greenapi');
+
+async function sendTextMessage(phone, text, options = {}) {
+  try {
+    // Format phone: remove @c.us if present, add if missing
+    const chatId = phone.includes('@c.us') ? phone : `${phone}@c.us`;
+    
+    const response = await greenAPI.message.sendMessage(
+      chatId,
+      null, // quotedMessageId (null for new message)
+      text,
+      {
+        typingTime: options.typingTime || 2000, // Typing indicator duration
+        quotedMessageId: options.quotedMessageId || null // Reply to message
+      }
+    );
+    
+    console.log('Message sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending message:', error);
+    throw error;
+  }
+}
+
+// Usage
+await sendTextMessage('1234567890', 'Hello! How can I help?', {
+  typingTime: 2000
+});
+```
+
+**Reference:** [Send Message API](https://green-api.com/en/docs/api/sending/SendMessage/)
+
+#### ✅ REQUIRED: Message Formatting
+
+**ALWAYS** support WhatsApp formatting:
+
+```javascript
+// ✅ DO: Use formatting in messages
+const formattedMessage = `
+*Bold text*
+_Italic text_
+~Strikethrough~
+\`Monospace\`
+
+*Bold* and _italic_ together
+
+Line 1
+Line 2
+
+• Bullet point 1
+• Bullet point 2
+
+1. Numbered item 1
+2. Numbered item 2
+`.trim();
+
+// ✅ DO: Send links (auto-detected)
+const messageWithLink = "Visit our website: https://example.com";
+
+// ✅ DO: Send emoji
+const messageWithEmoji = "Hello! 👋 How are you? 😊";
+```
+
+**Reference:** [Text Formatting](https://green-api.com/en/docs/faq/formatting-text/)
+
+### Media Messages
+
+#### ✅ REQUIRED: Send Image
+
+**ALWAYS** send images properly:
+
+```javascript
+// ✅ DO: Send image from file
+async function sendImage(phone, imagePath, caption = '') {
+  try {
+    const chatId = `${phone}@c.us`;
+    
+    const response = await greenAPI.file.sendFileByUpload(
+      chatId,
+      imagePath, // Path to image file
+      'image.jpg', // File name
+      caption // Optional caption
+    );
+    
+    console.log('Image sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending image:', error);
+    throw error;
+  }
+}
+
+// ✅ DO: Send image from URL
+async function sendImageFromURL(phone, imageUrl, caption = '') {
+  try {
+    const chatId = `${phone}@c.us`;
+    
+    const response = await greenAPI.file.sendFileByUrl(
+      chatId,
+      imageUrl,
+      'image.jpg',
+      caption
+    );
+    
+    console.log('Image sent from URL:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending image from URL:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Send File API](https://green-api.com/en/docs/api/sending/SendFileByUpload/)
+
+#### ✅ REQUIRED: Send Video
+
+**ALWAYS** send videos with proper handling:
+
+```javascript
+// ✅ DO: Send video
+async function sendVideo(phone, videoPath, caption = '') {
+  try {
+    const chatId = `${phone}@c.us`;
+    
+    const response = await greenAPI.file.sendFileByUpload(
+      chatId,
+      videoPath,
+      'video.mp4',
+      caption
+    );
+    
+    console.log('Video sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending video:', error);
+    throw error;
+  }
+}
+```
+
+#### ✅ REQUIRED: Send Document
+
+**ALWAYS** send documents properly:
+
+```javascript
+// ✅ DO: Send document
+async function sendDocument(phone, filePath, fileName, caption = '') {
+  try {
+    const chatId = `${phone}@c.us`;
+    
+    const response = await greenAPI.file.sendFileByUpload(
+      chatId,
+      filePath,
+      fileName,
+      caption
+    );
+    
+    console.log('Document sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending document:', error);
+    throw error;
+  }
+}
+```
+
+### Location & Contact
+
+#### ✅ REQUIRED: Send Location
+
+**ALWAYS** send location with coordinates:
+
+```javascript
+// ✅ DO: Send location
+async function sendLocation(phone, latitude, longitude, name = '') {
+  try {
+    const chatId = `${phone}@c.us`;
+    
+    const response = await greenAPI.message.sendLocation(
+      chatId,
+      latitude,
+      longitude,
+      name
+    );
+    
+    console.log('Location sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending location:', error);
+    throw error;
+  }
+}
+
+// Usage
+await sendLocation('1234567890', 40.7128, -74.0060, 'New York');
+```
+
+**Reference:** [Send Location API](https://green-api.com/en/docs/api/sending/SendLocation/)
+
+#### ✅ REQUIRED: Send Contact
+
+**ALWAYS** send contact with proper format:
+
+```javascript
+// ✅ DO: Send contact
+async function sendContact(phone, contactPhone, contactName) {
+  try {
+    const chatId = `${phone}@c.us`;
+    
+    const response = await greenAPI.message.sendContact(
+      chatId,
+      contactPhone,
+      contactName
+    );
+    
+    console.log('Contact sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending contact:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Send Contact API](https://green-api.com/en/docs/api/sending/SendContact/)
+
+### Interactive Messages
+
+#### ✅ REQUIRED: Send Buttons
+
+**ALWAYS** use buttons for user interaction:
+
+```javascript
+// ✅ DO: Send interactive buttons
+async function sendButtons(phone, message, buttons) {
+  try {
+    const chatId = `${phone}@c.us`;
+    
+    const response = await greenAPI.message.sendButtons(
+      chatId,
+      message,
+      buttons.map((btn, index) => ({
+        id: `btn_${index}`,
+        text: btn
+      }))
+    );
+    
+    console.log('Buttons sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending buttons:', error);
+    throw error;
+  }
+}
+
+// Usage
+await sendButtons('1234567890', 'Choose an option:', [
+  'Option 1',
+  'Option 2',
+  'Option 3'
+]);
+```
+
+**Reference:** [Send Buttons API](https://green-api.com/en/docs/api/sending/SendButtons/)
+
+#### ✅ REQUIRED: Send List Message
+
+**ALWAYS** use lists for multiple options:
+
+```javascript
+// ✅ DO: Send list message
+async function sendList(phone, title, description, buttonText, sections) {
+  try {
+    const chatId = `${phone}@c.us`;
+    
+    const response = await greenAPI.message.sendList(
+      chatId,
+      title,
+      description,
+      buttonText,
+      sections
+    );
+    
+    console.log('List sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending list:', error);
+    throw error;
+  }
+}
+
+// Usage
+await sendList(
+  '1234567890',
+  'Select Category',
+  'Choose a category from the list',
+  'View Categories',
+  [
+    {
+      title: 'Electronics',
+      rows: [
+        { id: '1', title: 'Phones', description: 'Smartphones' },
+        { id: '2', title: 'Laptops', description: 'Computers' }
+      ]
+    }
+  ]
+);
+```
+
+**Reference:** [Send List API](https://green-api.com/en/docs/api/sending/SendList/)
+
+---
+
+## 📥 Receiving Messages & Webhooks
+
+### Webhook Configuration
+
+#### ✅ REQUIRED: Configure Webhook URL
+
+**ALWAYS** set webhook URL in settings:
+
+```javascript
+// ✅ DO: Set webhook URL
+async function configureWebhook(webhookUrl) {
+  try {
+    const response = await greenAPI.account.setSettings({
+      incomingWebhook: "yes",
+      incomingWebhookUrl: webhookUrl,
+      outgoingWebhook: "yes",
+      stateWebhook: "yes"
+    });
+    
+    console.log('Webhook configured:', response);
+    return response;
+  } catch (error) {
+    console.error('Error configuring webhook:', error);
+    throw error;
+  }
+}
+
+// Or via console: https://console.green-api.com/
+// Settings → Webhook Settings → Set URL
+```
+
+**Reference:** [Webhook Configuration](https://green-api.com/en/docs/api/receiving/WebhookEndpoint/)
+
+### Webhook Handling
+
+#### ✅ REQUIRED: Handle Incoming Messages
+
+**ALWAYS** handle webhook properly:
+
+```javascript
+// backend/src/routes/webhooks/index.js
+const express = require("express");
+const router = express.Router();
+const whatsappHandler = require("../../services/greenapi/handler");
+
+router.post("/greenapi", async (req, res) => {
+  try {
+    const { typeWebhook } = req.body;
+    
+    console.log("Webhook received:", typeWebhook);
+    
+    // Handle different webhook types
+    switch (typeWebhook) {
+      case "incomingMessageReceived":
+        await whatsappHandler.handleIncomingMessage(req.body);
+        break;
+      case "outgoingMessageStatus":
+        await whatsappHandler.handleOutgoingStatus(req.body);
+        break;
+      case "deviceStatus":
+        await whatsappHandler.handleDeviceStatus(req.body);
+        break;
+      default:
+        console.log("Unhandled webhook type:", typeWebhook);
+    }
+    
+    // Always return 200 immediately
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Webhook error:", error);
+    // Still return 200 to prevent retries
+    res.sendStatus(200);
+  }
+});
+
+module.exports = router;
+```
+
+**Reference:** [Webhook Format](https://green-api.com/en/docs/api/receiving/IncomingNotificationsFormat/)
+
+#### ✅ REQUIRED: Parse Incoming Message
+
+**ALWAYS** parse incoming message correctly:
+
+```javascript
+// ✅ DO: Parse incoming message
+async function handleIncomingMessage(webhookData) {
+  const { typeWebhook, messageData, senderData } = webhookData;
+  
+  if (typeWebhook !== "incomingMessageReceived") {
+    return;
+  }
+  
+  // Extract sender
+  const phone = senderData.sender.replace("@c.us", "");
+  const senderName = senderData.senderName || "User";
+  
+  // Extract message text
+  let messageText = "";
+  if (messageData?.textMessageData?.textMessage) {
+    messageText = messageData.textMessageData.textMessage;
+  } else if (messageData?.textMessage) {
+    messageText = messageData.textMessage;
+  }
+  
+  // Extract message ID
+  const messageId = messageData.idMessage;
+  
+  // Extract timestamp
+  const timestamp = messageData.timestamp;
+  
+  // Process message
+  console.log(`Message from ${phone}: ${messageText}`);
+  
+  return {
+    phone,
+    senderName,
+    messageText,
+    messageId,
+    timestamp
+  };
+}
+```
+
+**Reference:** [Incoming Message Format](https://green-api.com/en/docs/api/receiving/IncomingMessage/)
+
+#### ✅ REQUIRED: Handle Media Messages
+
+**ALWAYS** handle media in incoming messages:
+
+```javascript
+// ✅ DO: Handle incoming image
+async function handleIncomingImage(webhookData) {
+  const { messageData } = webhookData;
+  
+  if (messageData.typeMessage === "imageMessage") {
+    const imageData = messageData.imageMessageData;
+    const imageUrl = imageData.downloadUrl;
+    const caption = imageData.caption || "";
+    
+    // Download image
+    const imageBuffer = await downloadFile(imageUrl);
+    
+    return {
+      type: "image",
+      url: imageUrl,
+      caption: caption,
+      buffer: imageBuffer
+    };
+  }
+}
+
+// ✅ DO: Handle incoming document
+async function handleIncomingDocument(webhookData) {
+  const { messageData } = webhookData;
+  
+  if (messageData.typeMessage === "documentMessage") {
+    const docData = messageData.documentMessageData;
+    const docUrl = docData.downloadUrl;
+    const fileName = docData.fileName;
+    
+    // Download document
+    const docBuffer = await downloadFile(docUrl);
+    
+    return {
+      type: "document",
+      url: docUrl,
+      fileName: fileName,
+      buffer: docBuffer
+    };
+  }
+}
+```
+
+**Reference:** [Incoming Media Format](https://green-api.com/en/docs/api/receiving/IncomingImageVideoAudioDocumentMessage/)
+
+### Message Status Tracking
+
+#### ✅ REQUIRED: Track Outgoing Message Status
+
+**ALWAYS** track message delivery status:
+
+```javascript
+// ✅ DO: Handle outgoing message status
+async function handleOutgoingStatus(webhookData) {
+  const { statusData, messageData } = webhookData;
+  
+  const messageId = statusData.idMessage;
+  const status = statusData.status; // sent, delivered, read, error
+  const timestamp = statusData.timestamp;
+  
+  // Update message status in database
+  await db.query(
+    `UPDATE messages 
+     SET status = $1, 
+         status_updated_at = NOW() 
+     WHERE message_id = $2`,
+    [status, messageId]
+  );
+  
+  console.log(`Message ${messageId} status: ${status}`);
+  
+  // Handle different statuses
+  switch (status) {
+    case "sent":
+      console.log("Message sent successfully");
+      break;
+    case "delivered":
+      console.log("Message delivered to recipient");
+      break;
+    case "read":
+      console.log("Message read by recipient");
+      break;
+    case "error":
+      console.error("Message sending error:", statusData.errorMessage);
+      break;
+  }
+}
+```
+
+**Reference:** [Outgoing Message Status](https://green-api.com/en/docs/api/receiving/OutgoingMessageStatus/)
+
+---
+
+## 👥 Groups Management
+
+### Group Operations
+
+#### ✅ REQUIRED: Create Group
+
+**ALWAYS** create groups properly:
+
+```javascript
+// ✅ DO: Create group
+async function createGroup(groupName, participants = []) {
+  try {
+    const response = await greenAPI.groups.createGroup(
+      groupName,
+      participants.map(p => `${p}@c.us`)
+    );
+    
+    console.log('Group created:', response);
+    return response;
+  } catch (error) {
+    console.error('Error creating group:', error);
+    throw error;
+  }
+}
+
+// Usage
+await createGroup('My Group', ['1234567890', '0987654321']);
+```
+
+**Reference:** [Create Group API](https://green-api.com/en/docs/api/groups/CreateGroup/)
+
+#### ✅ REQUIRED: Get Group Data
+
+**ALWAYS** retrieve group information:
+
+```javascript
+// ✅ DO: Get group data
+async function getGroupData(groupId) {
+  try {
+    const response = await greenAPI.groups.getGroupData(groupId);
+    
+    console.log('Group data:', response);
+    return {
+      id: response.id,
+      name: response.subject,
+      participants: response.participants,
+      creationTime: response.creationTime,
+      owner: response.owner
+    };
+  } catch (error) {
+    console.error('Error getting group data:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Get Group Data API](https://green-api.com/en/docs/api/groups/GetGroupData/)
+
+#### ✅ REQUIRED: Add Group Participant
+
+**ALWAYS** add participants correctly:
+
+```javascript
+// ✅ DO: Add group participant
+async function addGroupParticipant(groupId, phone) {
+  try {
+    const chatId = `${phone}@c.us`;
+    const response = await greenAPI.groups.addGroupParticipant(
+      groupId,
+      chatId
+    );
+    
+    console.log('Participant added:', response);
+    return response;
+  } catch (error) {
+    console.error('Error adding participant:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Add Participant API](https://green-api.com/en/docs/api/groups/AddGroupParticipant/)
+
+---
+
+## 📊 Statuses
+
+### Status Management
+
+#### ✅ REQUIRED: Send Text Status
+
+**ALWAYS** send status updates:
+
+```javascript
+// ✅ DO: Send text status
+async function sendTextStatus(text) {
+  try {
+    const response = await greenAPI.statuses.sendTextStatus(text);
+    
+    console.log('Status sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending status:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Send Text Status API](https://green-api.com/en/docs/api/statuses/SendTextStatus/)
+
+#### ✅ REQUIRED: Get Status Statistics
+
+**ALWAYS** track status performance:
+
+```javascript
+// ✅ DO: Get status statistics
+async function getStatusStatistics() {
+  try {
+    const response = await greenAPI.statuses.getStatusStatistics();
+    
+    console.log('Status statistics:', response);
+    return response;
+  } catch (error) {
+    console.error('Error getting statistics:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Status Statistics API](https://green-api.com/en/docs/api/statuses/GetStatusStatistics/)
+
+---
+
+## 🛠️ Service Methods
+
+### Utility Methods
+
+#### ✅ REQUIRED: Check WhatsApp Availability
+
+**ALWAYS** check if number is on WhatsApp:
+
+```javascript
+// ✅ DO: Check WhatsApp availability
+async function checkWhatsApp(phone) {
+  try {
+    const response = await greenAPI.service.checkWhatsApp(phone);
+    
+    console.log('WhatsApp check:', response);
+    return {
+      exists: response.existsWhatsapp,
+      phone: phone
+    };
+  } catch (error) {
+    console.error('Error checking WhatsApp:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Check WhatsApp API](https://green-api.com/en/docs/api/service/CheckWhatsApp/)
+
+#### ✅ REQUIRED: Get Contact Info
+
+**ALWAYS** retrieve contact information:
+
+```javascript
+// ✅ DO: Get contact info
+async function getContactInfo(phone) {
+  try {
+    const chatId = `${phone}@c.us`;
+    const response = await greenAPI.service.getContactInfo(chatId);
+    
+    console.log('Contact info:', response);
+    return {
+      name: response.name,
+      phone: phone,
+      avatar: response.avatar
+    };
+  } catch (error) {
+    console.error('Error getting contact info:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Get Contact Info API](https://green-api.com/en/docs/api/service/GetContactInfo/)
+
+#### ✅ REQUIRED: Send Typing Indicator
+
+**ALWAYS** use typing indicators:
+
+```javascript
+// ✅ DO: Send typing indicator
+async function sendTyping(phone, duration = 2000) {
+  try {
+    const chatId = `${phone}@c.us`;
+    const response = await greenAPI.service.sendTyping(chatId, duration);
+    
+    console.log('Typing indicator sent:', response);
+    return response;
+  } catch (error) {
+    console.error('Error sending typing:', error);
+    throw error;
+  }
+}
+
+// Usage: Send typing before message
+await sendTyping('1234567890', 2000);
+await sendMessage('1234567890', 'Hello!');
+```
+
+**Reference:** [Send Typing API](https://green-api.com/en/docs/api/service/SendTyping/)
+
+#### ✅ REQUIRED: Edit Message
+
+**ALWAYS** support message editing:
+
+```javascript
+// ✅ DO: Edit message
+async function editMessage(chatId, messageId, newText) {
+  try {
+    const response = await greenAPI.service.editMessage(
+      chatId,
+      messageId,
+      newText
+    );
+    
+    console.log('Message edited:', response);
+    return response;
+  } catch (error) {
+    console.error('Error editing message:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Edit Message API](https://green-api.com/en/docs/api/service/EditMessage/)
+
+#### ✅ REQUIRED: Delete Message
+
+**ALWAYS** support message deletion:
+
+```javascript
+// ✅ DO: Delete message
+async function deleteMessage(chatId, messageId) {
+  try {
+    const response = await greenAPI.service.deleteMessage(
+      chatId,
+      messageId
+    );
+    
+    console.log('Message deleted:', response);
+    return response;
+  } catch (error) {
+    console.error('Error deleting message:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Delete Message API](https://green-api.com/en/docs/api/service/DeleteMessage/)
+
+---
+
+## 📋 Queues Management
+
+### Message Queue
+
+#### ✅ REQUIRED: Check Queue Status
+
+**ALWAYS** monitor message queue:
+
+```javascript
+// ✅ DO: Get messages count in queue
+async function getQueueCount() {
+  try {
+    const response = await greenAPI.queues.getMessagesCount();
+    
+    console.log('Messages in queue:', response);
+    return response.count;
+  } catch (error) {
+    console.error('Error getting queue count:', error);
+    throw error;
+  }
+}
+
+// ✅ DO: Show queue
+async function showQueue() {
+  try {
+    const response = await greenAPI.queues.showMessagesQueue();
+    
+    console.log('Queue:', response);
+    return response;
+  } catch (error) {
+    console.error('Error showing queue:', error);
+    throw error;
+  }
+}
+
+// ✅ DO: Clear queue
+async function clearQueue() {
+  try {
+    const response = await greenAPI.queues.clearMessagesQueue();
+    
+    console.log('Queue cleared:', response);
+    return response;
+  } catch (error) {
+    console.error('Error clearing queue:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Queues API](https://green-api.com/en/docs/api/queues/ShowMessagesQueue/)
+
+---
+
+## 📖 Journals & History
+
+### Message History
+
+#### ✅ REQUIRED: Get Chat History
+
+**ALWAYS** retrieve chat history:
+
+```javascript
+// ✅ DO: Get chat history
+async function getChatHistory(phone, count = 100) {
+  try {
+    const chatId = `${phone}@c.us`;
+    const response = await greenAPI.journals.getChatHistory(chatId, count);
+    
+    console.log('Chat history:', response);
+    return response;
+  } catch (error) {
+    console.error('Error getting chat history:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Get Chat History API](https://green-api.com/en/docs/api/journals/GetChatHistory/)
+
+#### ✅ REQUIRED: Get Message Journal
+
+**ALWAYS** track message journals:
+
+```javascript
+// ✅ DO: Get incoming messages journal
+async function getIncomingJournal(count = 100) {
+  try {
+    const response = await greenAPI.journals.getIncomingMessagesJournal(count);
+    
+    console.log('Incoming journal:', response);
+    return response;
+  } catch (error) {
+    console.error('Error getting incoming journal:', error);
+    throw error;
+  }
+}
+
+// ✅ DO: Get outgoing messages journal
+async function getOutgoingJournal(count = 100) {
+  try {
+    const response = await greenAPI.journals.getOutgoingMessagesJournal(count);
+    
+    console.log('Outgoing journal:', response);
+    return response;
+  } catch (error) {
+    console.error('Error getting outgoing journal:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Journals API](https://green-api.com/en/docs/api/journals/GetIncomingMessagesJournal/)
+
+---
+
+## ✅ Read Marks
+
+### Mark as Read
+
+#### ✅ REQUIRED: Mark Chat as Read
+
+**ALWAYS** mark chats as read:
+
+```javascript
+// ✅ DO: Mark chat as read
+async function markChatAsRead(phone) {
+  try {
+    const chatId = `${phone}@c.us`;
+    const response = await greenAPI.readMark.markChatAsRead(chatId);
+    
+    console.log('Chat marked as read:', response);
+    return response;
+  } catch (error) {
+    console.error('Error marking chat as read:', error);
+    throw error;
+  }
+}
+```
+
+**Reference:** [Mark as Read API](https://green-api.com/en/docs/api/readMark/MarkChatAsRead/)
+
+---
+
+## ⚠️ Error Handling
+
+### Common Errors
+
+#### ✅ REQUIRED: Handle Common Errors
+
+**ALWAYS** handle errors properly:
+
+```javascript
+// ✅ DO: Comprehensive error handling
+async function sendMessageSafely(phone, text) {
+  try {
+    const response = await greenAPI.message.sendMessage(
+      `${phone}@c.us`,
+      null,
+      text
+    );
+    return { success: true, data: response };
+  } catch (error) {
+    // Handle specific error codes
+    switch (error.statusCode) {
+      case 400:
+        console.error('Bad request:', error.message);
+        return { success: false, error: 'Invalid request' };
+      case 401:
+        console.error('Unauthorized:', error.message);
+        return { success: false, error: 'Authentication failed' };
+      case 429:
+        console.error('Rate limit:', error.message);
+        return { success: false, error: 'Rate limit exceeded' };
+      case 500:
+        console.error('Server error:', error.message);
+        return { success: false, error: 'Server error' };
+      default:
+        console.error('Unknown error:', error);
+        return { success: false, error: 'Unknown error' };
+    }
+  }
+}
+```
+
+**Reference:** [Common Errors](https://green-api.com/en/docs/api/others/CommonErrors/)
+
+---
+
+## 🚦 Rate Limiting
+
+### Rate Limit Management
+
+#### ✅ REQUIRED: Respect Rate Limits
+
+**ALWAYS** implement rate limiting:
+
+```javascript
+// ✅ DO: Implement rate limiting
+class RateLimiter {
+  constructor() {
+    this.requests = new Map();
+    this.limits = {
+      sendMessage: { max: 100, window: 60000 }, // 100 per minute
+      getMessages: { max: 200, window: 60000 }  // 200 per minute
+    };
+  }
+
+  async checkLimit(endpoint) {
+    const limit = this.limits[endpoint];
+    if (!limit) return true;
+
+    const now = Date.now();
+    const record = this.requests.get(endpoint);
+
+    if (!record || now > record.resetAt) {
+      this.requests.set(endpoint, {
+        count: 1,
+        resetAt: now + limit.window
+      });
+      return true;
+    }
+
+    if (record.count >= limit.max) {
+      const waitTime = record.resetAt - now;
+      await this.sleep(waitTime);
+      return this.checkLimit(endpoint);
+    }
+
+    record.count++;
+    return true;
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+```
+
+**Reference:** [Rate Limiter](https://green-api.com/en/docs/api/ratelimiter/)
+
+---
+
+## 🎯 Integration Best Practices
+
+### Recommended Practices
+
+#### ✅ REQUIRED: Follow Integration Recommendations
+
+**ALWAYS** follow these practices:
+
+1. **Instance Configuration:**
+   ```javascript
+   // ✅ DO: Configure instance properly
+   await greenAPI.account.setSettings({
+     delaySendMessagesMilliseconds: 12000, // 10-15 seconds
+     markIncomingMessagesReaded: "yes",
+     incomingWebhook: "yes",
+     outgoingWebhook: "yes",
+     stateWebhook: "yes"
+   });
+   ```
+
+2. **Webhook Handling:**
+   ```javascript
+   // ✅ DO: Always return 200 immediately
+   router.post("/webhooks/greenapi", async (req, res) => {
+     // Process asynchronously
+     processWebhook(req.body).catch(console.error);
+     // Return immediately
+     res.sendStatus(200);
+   });
+   ```
+
+3. **Error Recovery:**
+   ```javascript
+   // ✅ DO: Implement retry logic
+   async function sendWithRetry(phone, text, maxRetries = 3) {
+     for (let i = 0; i < maxRetries; i++) {
+       try {
+         return await greenAPI.message.sendMessage(`${phone}@c.us`, null, text);
+       } catch (error) {
+         if (i === maxRetries - 1) throw error;
+         await sleep(1000 * (i + 1)); // Exponential backoff
+       }
+     }
+   }
+   ```
+
+**Reference:** [Integration Recommendations](https://green-api.com/en/docs/api/integration-recommendations/IntegrationRecommendations/)
+
+---
+
+## 📚 Complete API Reference
+
+### All Available Methods
+
+#### Account Methods
+- `getSettings()` - Get instance settings
+- `setSettings()` - Set instance settings
+- `getStateInstance()` - Get instance state
+- `rebootInstance()` - Reboot instance
+- `logoutInstance()` - Logout instance
+- `getQRCode()` - Get QR code
+- `linkWithPhoneNumber()` - Link with phone
+
+#### Sending Methods
+- `sendMessage()` - Send text message
+- `sendFileByUpload()` - Send file
+- `sendFileByUrl()` - Send file from URL
+- `sendLocation()` - Send location
+- `sendContact()` - Send contact
+- `sendButtons()` - Send buttons
+- `sendList()` - Send list message
+- `forwardMessages()` - Forward messages
+
+#### Receiving Methods
+- Webhook endpoint (configured in settings)
+- Handle incoming webhooks
+
+#### Groups Methods
+- `createGroup()` - Create group
+- `getGroupData()` - Get group info
+- `updateGroupSettings()` - Update settings
+- `addGroupParticipant()` - Add participant
+- `deleteGroupParticipant()` - Remove participant
+- `setGroupAdminRights()` - Set admin
+- `leaveGroup()` - Leave group
+
+#### Service Methods
+- `checkWhatsApp()` - Check number
+- `getContactInfo()` - Get contact info
+- `sendTyping()` - Send typing indicator
+- `editMessage()` - Edit message
+- `deleteMessage()` - Delete message
+- `archiveChat()` - Archive chat
+
+**Full Documentation:** [Green API Documentation](https://green-api.com/en/docs/)
+
+---
+
+## 🔗 Reference Links
+
+### Official Documentation
+
+- **Main Documentation**: https://green-api.com/en/docs/
+- **API Collections**: https://green-api.com/en/docs/api-collections/
+- **FAQ**: https://green-api.com/en/docs/faq/
+- **SDK**: https://green-api.com/en/docs/sdk/
+- **Console**: https://console.green-api.com/
+
+### Key Documentation Pages
+
+- **Account Management**: https://green-api.com/en/docs/api/account/
+- **Sending Messages**: https://green-api.com/en/docs/api/sending/
+- **Receiving Messages**: https://green-api.com/en/docs/api/receiving/
+- **Groups**: https://green-api.com/en/docs/api/groups/
+- **Statuses**: https://green-api.com/en/docs/api/statuses/
+- **Service Methods**: https://green-api.com/en/docs/api/service/
+- **Rate Limiter**: https://green-api.com/en/docs/api/ratelimiter/
+
+---
+
+**Last Updated**: December 19, 2024  
+**Version**: 1.0.0  
+**Status**: Active  
+**Based on**: Official Green API Documentation v1.0

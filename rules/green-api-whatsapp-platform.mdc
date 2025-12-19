@@ -1,0 +1,1169 @@
+---
+description: Comprehensive rules for building WhatsApp-based business platforms using Green API
+globs: 
+  - "backend/src/**/*.js"
+  - "backend/src/config/greenapi.js"
+  - "backend/src/services/greenapi/**/*.js"
+  - "backend/src/routes/webhooks/**/*.js"
+  - "backend/src/templates/whatsapp/**/*.js"
+alwaysApply: true
+---
+
+# Green API WhatsApp Business Platform - Development Rules
+
+<author>MuntuShop Development Team</author>
+<version>1.0.0</version>
+
+## Context
+
+- Complete guide for building WhatsApp-based business platforms using Green API
+- Covers webhook handling, message routing, service architecture, templates, and state management
+- Based on production-tested patterns from MuntuShop platform
+- Ensures scalable, maintainable, and secure WhatsApp bot implementations
+
+---
+
+## 🚀 Green API Setup & Configuration
+
+### Initial Setup
+
+#### ✅ REQUIRED: Environment Variables
+
+**ALWAYS** configure these environment variables:
+
+```bash
+# Green API Credentials
+GREEN_ID_INSTANCE=your_instance_id
+GREEN_API_TOKEN_INSTANCE=your_api_token
+
+# Optional
+GREEN_PHONE=+1234567890  # Your WhatsApp business number
+```
+
+#### ✅ REQUIRED: Green API Client Configuration
+
+**ALWAYS** create a centralized config file:
+
+```javascript
+// backend/src/config/greenapi.js
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../../.env') });
+const whatsAppClient = require('@green-api/whatsapp-api-client');
+
+const idInstance = process.env.GREEN_ID_INSTANCE;
+const apiTokenInstance = process.env.GREEN_API_TOKEN_INSTANCE;
+
+if (!idInstance || !apiTokenInstance) {
+  console.error('❌ Green API credentials missing!');
+  // Return dummy object to prevent crashes
+  module.exports = {
+    message: {
+      sendMessage: async () => {
+        console.warn('⚠️ Green API not configured - message not sent');
+      }
+    }
+  };
+} else {
+  const restAPI = whatsAppClient.restAPI({
+    idInstance: idInstance,
+    apiTokenInstance: apiTokenInstance,
+  });
+  module.exports = restAPI;
+}
+```
+
+#### ✅ REQUIRED: Webhook Configuration
+
+**ALWAYS** configure webhook in Green API dashboard:
+
+1. Go to Green API Console: https://console.green-api.com/
+2. Select your instance
+3. Navigate to "Webhook Settings"
+4. Set webhook URL: `https://your-domain.com/webhooks/greenapi`
+5. Enable webhook types:
+   - ✅ `incomingMessageReceived` - Incoming messages
+   - ✅ `outgoingMessageStatus` - Message status updates
+   - ✅ `deviceStatus` - Device connection status
+
+---
+
+## 📡 Webhook Handling Rules
+
+### Webhook Route Structure
+
+#### ✅ REQUIRED: Webhook Route Pattern
+
+**ALWAYS** create webhook route with proper error handling:
+
+```javascript
+// backend/src/routes/webhooks/index.js
+const express = require("express");
+const router = express.Router();
+const whatsappHandler = require("../../services/greenapi/handler");
+
+router.post("/greenapi", async (req, res) => {
+  try {
+    console.log("Green API webhook received:", req.body.typeWebhook);
+    
+    // Process webhook asynchronously
+    await whatsappHandler.handleIncomingMessage(req.body);
+    
+    // Always return 200 immediately (don't wait for processing)
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("Green API webhook error:", error);
+    // Still return 200 to prevent retries for processing errors
+    res.sendStatus(200);
+  }
+});
+
+module.exports = router;
+```
+
+#### ✅ REQUIRED: Webhook Data Validation
+
+**ALWAYS** validate webhook data before processing:
+
+```javascript
+async handleIncomingMessage(webhookData) {
+  // ✅ DO: Validate webhook structure
+  if (!webhookData || !webhookData.typeWebhook) {
+    console.log("Invalid webhook data received");
+    return;
+  }
+
+  const { typeWebhook, messageData, senderData } = webhookData;
+
+  // ✅ DO: Only process incoming messages
+  if (typeWebhook !== "incomingMessageReceived") {
+    return;
+  }
+
+  // ✅ DO: Validate sender data
+  if (!senderData || !senderData.sender) {
+    console.error("Missing sender data in webhook");
+    return;
+  }
+}
+```
+
+#### ✅ REQUIRED: Message Extraction Pattern
+
+**ALWAYS** safely extract message text:
+
+```javascript
+// ✅ DO: Safe message extraction
+let message = "";
+if (
+  messageData &&
+  messageData.textMessageData &&
+  messageData.textMessageData.textMessage
+) {
+  message = messageData.textMessageData.textMessage;
+} else if (messageData && messageData.textMessage) {
+  message = messageData.textMessage;
+}
+
+// ✅ DO: Skip if no text message (prevents responding to status updates)
+if (!message || message.trim().length === 0) {
+  console.log(`📨 Skipping webhook - no text message from ${phone}`);
+  return;
+}
+```
+
+#### ❌ DON'T: Process Non-Text Messages Without Handling
+
+```javascript
+// ❌ DON'T: Process all webhook types
+if (typeWebhook === "incomingMessageReceived" || 
+    typeWebhook === "outgoingMessageStatus" ||
+    typeWebhook === "deviceStatus") {
+  // This will cause issues
+}
+
+// ❌ DON'T: Process empty messages
+if (messageData) {
+  // Missing validation - will crash on status updates
+}
+```
+
+---
+
+## 🏗️ Message Routing Architecture
+
+### Handler Structure
+
+#### ✅ REQUIRED: Central Message Handler
+
+**ALWAYS** create a central handler class:
+
+```javascript
+// backend/src/services/greenapi/handler.js
+const db = require("../../config/database");
+const templates = require("../../templates/whatsapp");
+const greenAPI = require("../../config/greenapi");
+
+class WhatsAppHandler {
+  async handleIncomingMessage(webhookData) {
+    // 1. Validate webhook
+    // 2. Extract message and sender
+    // 3. Get or create user
+    // 4. Route message
+  }
+
+  async routeMessage(user, message) {
+    // Route logic here
+  }
+}
+
+module.exports = new WhatsAppHandler();
+```
+
+#### ✅ REQUIRED: Message Routing Pattern
+
+**ALWAYS** follow this routing hierarchy:
+
+```javascript
+async routeMessage(user, message) {
+  const msg = message.toLowerCase().trim();
+
+  // 1. Universal commands (highest priority)
+  if (["hi", "hello", "hey", "menu", "start", "help"].includes(msg)) {
+    if (msg === "help") {
+      return await this.sendHelp(user.phone);
+    }
+    return await this.sendMainMenu(user.phone);
+  }
+
+  // 2. Service flow commands (if in service)
+  if (user.current_service) {
+    return await this.handleServiceFlow(user, message);
+  }
+
+  // 3. Main menu selection (numbers)
+  if (msg.match(/^[0-9]{1,2}$/)) {
+    const option = parseInt(msg);
+    return await this.handleMainMenuSelection(user, option);
+  }
+
+  // 4. Natural language (AI agent)
+  return await this.handleNaturalLanguage(user, message);
+}
+```
+
+#### ✅ REQUIRED: Service Flow Management
+
+**ALWAYS** track user's current service and step:
+
+```javascript
+// ✅ DO: Update user state when entering service
+async handleMainMenuSelection(user, option) {
+  const services = {
+    1: "shopping",
+    2: "messaging",
+    3: "support",
+    // ... more services
+  };
+
+  const service = services[option];
+  
+  // Update user's current service
+  await db.query(
+    "UPDATE users SET current_service = $1, current_step = $2 WHERE id = $3",
+    [service, "menu", user.id]
+  );
+  
+  // Refresh user object
+  user = await this.getUser(user.phone);
+  
+  // Send service menu
+  await this.sendServiceMenu(user, service);
+}
+```
+
+---
+
+## 🎯 Service Implementation Rules
+
+### Service Architecture Pattern
+
+#### ✅ REQUIRED: Service Class Structure
+
+**ALWAYS** implement services using this pattern:
+
+```javascript
+// backend/src/services/[service]/index.js
+const db = require("../../config/database");
+const greenAPI = require("../../config/greenapi");
+const templates = require("../../templates/whatsapp");
+
+class ServiceName {
+  async handleMessage(user, message) {
+    const step = user.current_step;
+    const msg = message.toLowerCase().trim();
+
+    // Universal navigation
+    if (msg === "0" || msg === "back") {
+      return await this.goBack(user);
+    }
+    if (msg === "menu") {
+      return await this.showMainMenu(user);
+    }
+
+    // Route by step
+    switch (step) {
+      case "menu":
+        return await this.handleMenuSelection(user, msg);
+      case "selection":
+        return await this.handleSelection(user, msg);
+      default:
+        return await this.showMenu(user);
+    }
+  }
+
+  async showMenu(user) {
+    await this.updateUserStep(user.id, "menu");
+    const menu = templates.serviceName.menu();
+    await this.sendMessage(user.phone, menu);
+  }
+
+  async updateUserStep(userId, step, context = {}) {
+    await db.query(
+      `UPDATE users 
+       SET current_step = $1, 
+           context = $2, 
+           updated_at = NOW() 
+       WHERE id = $3`,
+      [step, JSON.stringify(context), userId]
+    );
+  }
+
+  async sendMessage(phone, text) {
+    await greenAPI.message.sendMessage(`${phone}@c.us`, null, text);
+  }
+}
+
+module.exports = new ServiceName();
+```
+
+#### ✅ REQUIRED: Step-Based Navigation
+
+**ALWAYS** use step-based navigation for multi-step flows:
+
+```javascript
+// ✅ DO: Clear step progression
+switch (step) {
+  case "menu":
+    // Show menu, wait for selection
+    return await this.handleMenuSelection(user, msg);
+  case "product_selection":
+    // Show products, wait for product choice
+    return await this.handleProductSelection(user, msg);
+  case "checkout_address":
+    // Collect address, wait for text input
+    return await this.handleAddressInput(user, message);
+  case "checkout_payment":
+    // Show payment options, wait for selection
+    return await this.handlePaymentSelection(user, msg);
+  default:
+    // Reset to menu
+    return await this.showMenu(user);
+}
+```
+
+#### ✅ REQUIRED: Context Management
+
+**ALWAYS** store service context in user record:
+
+```javascript
+// ✅ DO: Store context for multi-step flows
+async handleProductSelection(user, msg) {
+  const productId = parseInt(msg);
+  
+  // Store selected product in context
+  await db.query(
+    `UPDATE users 
+     SET current_step = $1,
+         context = $2,
+         updated_at = NOW()
+     WHERE id = $3`,
+    [
+      "product_detail",
+      JSON.stringify({ productId, selectedAt: new Date() }),
+      user.id
+    ]
+  );
+  
+  // Show product details
+  await this.showProductDetails(user, productId);
+}
+
+// ✅ DO: Retrieve context when needed
+async getProductFromContext(user) {
+  const context = user.context ? JSON.parse(user.context) : {};
+  return context.productId;
+}
+```
+
+---
+
+## 📝 Template System Rules
+
+### Template Structure
+
+#### ✅ REQUIRED: Template File Organization
+
+**ALWAYS** organize templates by service:
+
+```
+backend/src/templates/whatsapp/
+├── index.js          # Main exports
+├── menus.js          # Main menu templates
+├── shopping.js       # Shopping service templates
+├── iptv.js          # IPTV service templates
+└── [service].js      # Other service templates
+```
+
+#### ✅ REQUIRED: Template Function Pattern
+
+**ALWAYS** export template functions, not strings:
+
+```javascript
+// ✅ DO: Export functions
+// backend/src/templates/whatsapp/shopping.js
+module.exports = {
+  menu: () => {
+    return `
+🛍️ SHOPPING STORE
+
+1. Phone Accessories
+2. Fashion & Clothing
+3. Electronics
+4. Home & Living
+5. Games & Toys
+
+6. View Cart
+7. My Orders
+8. Back to Main Menu
+
+Reply with number (1-8)
+    `.trim();
+  },
+
+  productDetail: (product) => {
+    return `
+📦 ${product.name}
+💰 $${product.price}
+⭐ ${product.rating}/5
+
+${product.description}
+
+1. Add to Cart
+2. View Reviews
+3. Back
+    `.trim();
+  },
+
+  cart: (items, total) => {
+    return `
+🛒 YOUR CART
+
+${items.map((item, i) => `${i + 1}. ${item.name} - $${item.price}`).join('\n')}
+
+Total: $${total}
+
+1. Checkout
+2. Remove Item
+3. Clear Cart
+4. Back
+    `.trim();
+  }
+};
+```
+
+#### ✅ REQUIRED: Template Best Practices
+
+**ALWAYS** follow these template guidelines:
+
+1. **Use emojis for visual clarity** ✅
+2. **Keep messages under 4096 characters** ✅
+3. **Use `.trim()` to remove extra whitespace** ✅
+4. **Format for WhatsApp readability** ✅
+5. **Include navigation options** ✅
+
+```javascript
+// ✅ DO: Well-formatted template
+menu: () => {
+  return `
+👋 WELCOME
+
+Choose an option:
+
+1️⃣ Option 1
+2️⃣ Option 2
+3️⃣ Option 3
+
+💡 Type MENU to return
+💡 Type HELP for assistance
+  `.trim();
+}
+
+// ❌ DON'T: Poor formatting
+menu: () => {
+  return "Welcome. Choose 1, 2, or 3. Type menu to return.";
+}
+```
+
+#### ✅ REQUIRED: Dynamic Template Data
+
+**ALWAYS** pass data to templates as parameters:
+
+```javascript
+// ✅ DO: Parameterized templates
+productDetail: (product) => {
+  return `
+📦 ${product.name}
+💰 $${product.price}
+⭐ ${product.rating}/5
+  `.trim();
+}
+
+// Usage
+const product = await getProduct(productId);
+const message = templates.shopping.productDetail(product);
+await this.sendMessage(user.phone, message);
+
+// ❌ DON'T: Hardcode data in templates
+productDetail: () => {
+  return "Product: iPhone 15 - $999";
+}
+```
+
+---
+
+## 👤 User Management Rules
+
+### User Creation & Retrieval
+
+#### ✅ REQUIRED: User Creation Pattern
+
+**ALWAYS** create users on first message:
+
+```javascript
+async handleIncomingMessage(webhookData) {
+  const phone = senderData.sender.replace("@c.us", "");
+  
+  // Get or create user
+  let user = await this.getUser(phone);
+  
+  if (!user) {
+    try {
+      user = await this.createUser(phone, senderData.senderName || "User");
+      
+      // Send welcome message
+      const welcomeMsg = templates.main.welcomeMessage(user.name);
+      await this.sendMessage(phone, welcomeMsg);
+    } catch (createError) {
+      console.error("Error creating user:", createError);
+      await this.sendMessage(
+        phone,
+        "Sorry, there was an error setting up your account. Please try again later."
+      );
+      return;
+    }
+  } else {
+    // Update last seen
+    await db.query(
+      "UPDATE users SET last_seen_at = NOW() WHERE id = $1",
+      [user.id]
+    );
+    // Refresh user object
+    user = await this.getUser(phone);
+  }
+}
+```
+
+#### ✅ REQUIRED: User Retrieval Pattern
+
+**ALWAYS** safely retrieve and parse user data:
+
+```javascript
+async getUser(phone) {
+  try {
+    if (!phone) {
+      return null;
+    }
+    
+    const result = await db.query(
+      "SELECT * FROM users WHERE phone = $1",
+      [phone]
+    );
+    
+    const user = result.rows[0] || null;
+    
+    // Parse JSON fields
+    if (user && user.context && typeof user.context === "string") {
+      try {
+        user.context = JSON.parse(user.context);
+      } catch (e) {
+        user.context = {};
+      }
+    }
+    
+    if (user && user.session_data && typeof user.session_data === "string") {
+      try {
+        user.session_data = JSON.parse(user.session_data);
+      } catch (e) {
+        user.session_data = {};
+      }
+    }
+    
+    return user;
+  } catch (error) {
+    console.error("Error getting user:", error);
+    return null;
+  }
+}
+```
+
+#### ✅ REQUIRED: Phone Number Format
+
+**ALWAYS** normalize phone numbers:
+
+```javascript
+// ✅ DO: Normalize phone format
+const phone = senderData.sender.replace("@c.us", "");
+// Result: "1234567890" or "+1234567890"
+
+// ✅ DO: Store in consistent format
+await db.query(
+  "INSERT INTO users (phone) VALUES ($1)",
+  [phone] // Store without @c.us suffix
+);
+
+// ✅ DO: Use correct format for sending
+await greenAPI.message.sendMessage(`${phone}@c.us`, null, text);
+```
+
+---
+
+## 🔄 State Management Rules
+
+### User State Tracking
+
+#### ✅ REQUIRED: State Fields
+
+**ALWAYS** track these user state fields:
+
+```sql
+-- users table should have:
+current_service VARCHAR(50)     -- Which service user is in
+current_step VARCHAR(50)        -- Current step in service flow
+context JSONB                    -- Service-specific context data
+session_data JSONB              -- Temporary session data
+last_seen_at TIMESTAMP          -- Last activity timestamp
+```
+
+#### ✅ REQUIRED: State Update Pattern
+
+**ALWAYS** update state atomically:
+
+```javascript
+// ✅ DO: Update state with context
+async updateUserStep(userId, step, context = {}) {
+  await db.query(
+    `UPDATE users 
+     SET current_step = $1,
+         context = $2,
+         updated_at = NOW()
+     WHERE id = $3`,
+    [step, JSON.stringify(context), userId]
+  );
+}
+
+// ✅ DO: Clear state when returning to main menu
+async resetToMainMenu(userId) {
+  await db.query(
+    `UPDATE users 
+     SET current_service = NULL,
+         current_step = NULL,
+         context = NULL,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [userId]
+  );
+}
+```
+
+#### ✅ REQUIRED: State Refresh Pattern
+
+**ALWAYS** refresh user object after state changes:
+
+```javascript
+// ✅ DO: Refresh user after state update
+await db.query(
+  "UPDATE users SET current_service = $1 WHERE id = $2",
+  [service, user.id]
+);
+// Refresh user object
+user = await this.getUser(user.phone);
+// Now use updated user object
+
+// ❌ DON'T: Use stale user object
+await db.query("UPDATE users SET current_service = $1 WHERE id = $2", [service, user.id]);
+// user.current_service is still old value!
+await this.handleServiceFlow(user, message); // Wrong service!
+```
+
+---
+
+## 📨 Message Sending Rules
+
+### Sending Messages
+
+#### ✅ REQUIRED: Message Sending Pattern
+
+**ALWAYS** use this pattern for sending messages:
+
+```javascript
+async sendMessage(phone, text) {
+  try {
+    // ✅ DO: Validate phone number
+    if (!phone || !text) {
+      console.error("Invalid phone or message");
+      return;
+    }
+    
+    // ✅ DO: Format phone correctly
+    const formattedPhone = phone.includes("@c.us") 
+      ? phone 
+      : `${phone}@c.us`;
+    
+    // ✅ DO: Send message
+    await greenAPI.message.sendMessage(formattedPhone, null, text);
+    
+    console.log(`✅ Message sent to ${phone}`);
+  } catch (error) {
+    console.error(`❌ Error sending message to ${phone}:`, error);
+    // Don't throw - log and continue
+  }
+}
+```
+
+#### ✅ REQUIRED: Error Handling for Messages
+
+**ALWAYS** handle message sending errors gracefully:
+
+```javascript
+// ✅ DO: Handle errors without crashing
+try {
+  await greenAPI.message.sendMessage(`${phone}@c.us`, null, text);
+} catch (error) {
+  console.error("Error sending WhatsApp message:", error);
+  // Log but don't throw - user experience continues
+}
+
+// ❌ DON'T: Let errors crash the handler
+await greenAPI.message.sendMessage(`${phone}@c.us`, null, text);
+// If this fails, entire webhook handler crashes
+```
+
+#### ✅ REQUIRED: Message Length Validation
+
+**ALWAYS** check message length before sending:
+
+```javascript
+// ✅ DO: Validate message length
+if (text.length > 4096) {
+  // Split long messages
+  const chunks = this.splitMessage(text, 4000);
+  for (const chunk of chunks) {
+    await this.sendMessage(phone, chunk);
+    // Small delay between chunks
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+} else {
+  await this.sendMessage(phone, text);
+}
+
+splitMessage(text, maxLength) {
+  const chunks = [];
+  let currentChunk = "";
+  
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if ((currentChunk + line + '\n').length > maxLength) {
+      if (currentChunk) chunks.push(currentChunk.trim());
+      currentChunk = line + '\n';
+    } else {
+      currentChunk += line + '\n';
+    }
+  }
+  if (currentChunk) chunks.push(currentChunk.trim());
+  return chunks;
+}
+```
+
+---
+
+## 🎨 Navigation Commands Rules
+
+### Universal Commands
+
+#### ✅ REQUIRED: Support Universal Commands
+
+**ALWAYS** support these universal commands:
+
+```javascript
+// ✅ DO: Universal command handling
+const universalCommands = {
+  "menu": () => this.sendMainMenu(user.phone),
+  "MENU": () => this.sendMainMenu(user.phone),
+  "main": () => this.sendMainMenu(user.phone),
+  "help": () => this.sendHelp(user.phone),
+  "HELP": () => this.sendHelp(user.phone),
+  "0": () => this.goBack(user),
+  "back": () => this.goBack(user),
+  "cancel": () => this.cancelCurrentAction(user),
+};
+
+// Check for universal commands first
+const msg = message.toLowerCase().trim();
+if (universalCommands[msg]) {
+  return await universalCommands[msg]();
+}
+```
+
+#### ✅ REQUIRED: Back Navigation Pattern
+
+**ALWAYS** implement proper back navigation:
+
+```javascript
+async goBack(user) {
+  const step = user.current_step;
+  
+  // Define step hierarchy
+  const stepHierarchy = {
+    "product_detail": "products",
+    "products": "category",
+    "category": "menu",
+    "checkout_payment": "checkout_address",
+    "checkout_address": "cart",
+    "cart": "menu"
+  };
+  
+  const previousStep = stepHierarchy[step] || "menu";
+  
+  if (previousStep === "menu" && user.current_service) {
+    // Return to service menu
+    await this.updateUserStep(user.id, "menu");
+    await this.showMenu(user);
+  } else if (previousStep === "menu" && !user.current_service) {
+    // Return to main menu
+    await this.resetToMainMenu(user.id);
+    await this.sendMainMenu(user.phone);
+  } else {
+    // Go to previous step
+    await this.updateUserStep(user.id, previousStep);
+    await this.showStep(user, previousStep);
+  }
+}
+```
+
+---
+
+## 🔒 Security Rules
+
+### Input Validation
+
+#### ✅ REQUIRED: Validate All User Input
+
+**ALWAYS** validate user input before processing:
+
+```javascript
+// ✅ DO: Validate numeric input
+async handleMenuSelection(user, msg) {
+  const option = parseInt(msg);
+  
+  if (isNaN(option)) {
+    await this.sendMessage(
+      user.phone,
+      "❌ Invalid option. Please reply with a number."
+    );
+    return;
+  }
+  
+  if (option < 1 || option > 10) {
+    await this.sendMessage(
+      user.phone,
+      "❌ Invalid option. Please choose 1-10."
+    );
+    return;
+  }
+  
+  // Process valid option
+}
+
+// ✅ DO: Validate phone numbers
+function isValidPhone(phone) {
+  return /^\+?[1-9]\d{1,14}$/.test(phone);
+}
+
+// ✅ DO: Sanitize text input
+function sanitizeInput(text) {
+  return text.trim().slice(0, 1000); // Limit length
+}
+```
+
+#### ✅ REQUIRED: SQL Injection Prevention
+
+**ALWAYS** use parameterized queries:
+
+```javascript
+// ✅ DO: Parameterized queries
+await db.query(
+  "SELECT * FROM products WHERE id = $1 AND category = $2",
+  [productId, category]
+);
+
+// ❌ DON'T: String concatenation
+await db.query(
+  `SELECT * FROM products WHERE id = ${productId} AND category = '${category}'`
+);
+```
+
+### Rate Limiting
+
+#### ✅ REQUIRED: Implement Rate Limiting
+
+**ALWAYS** implement rate limiting to prevent abuse:
+
+```javascript
+// ✅ DO: Rate limiting
+const rateLimiter = new Map(); // phone -> { count, resetAt }
+
+function checkRateLimit(phone) {
+  const now = Date.now();
+  const userLimit = rateLimiter.get(phone);
+  
+  if (!userLimit || now > userLimit.resetAt) {
+    rateLimiter.set(phone, { count: 1, resetAt: now + 60000 }); // 1 minute
+    return true;
+  }
+  
+  if (userLimit.count >= 10) { // 10 messages per minute
+    return false;
+  }
+  
+  userLimit.count++;
+  return true;
+}
+
+async routeMessage(user, message) {
+  if (!checkRateLimit(user.phone)) {
+    await this.sendMessage(
+      user.phone,
+      "⚠️ Too many messages. Please wait a moment."
+    );
+    return;
+  }
+  
+  // Process message
+}
+```
+
+---
+
+## 🧪 Testing Rules
+
+### Webhook Testing
+
+#### ✅ REQUIRED: Test Webhook Structure
+
+**ALWAYS** create test webhook payloads:
+
+```javascript
+// tests/test_webhook.json
+{
+  "typeWebhook": "incomingMessageReceived",
+  "instanceData": {
+    "idInstance": 12345,
+    "wid": "1234567890@c.us",
+    "typeInstance": "whatsapp"
+  },
+  "timestamp": 1234567890,
+  "idMessage": "ABC123",
+  "senderData": {
+    "sender": "1234567890@c.us",
+    "senderName": "Test User",
+    "senderChatId": "1234567890@c.us"
+  },
+  "messageData": {
+    "typeMessage": "textMessage",
+    "textMessageData": {
+      "textMessage": "menu"
+    }
+  }
+}
+```
+
+#### ✅ REQUIRED: Test Service Flows
+
+**ALWAYS** test complete service flows:
+
+```javascript
+// Test complete shopping flow
+async function testShoppingFlow() {
+  // 1. Send menu
+  await sendTestWebhook("menu");
+  // 2. Select shopping
+  await sendTestWebhook("1");
+  // 3. Select category
+  await sendTestWebhook("1");
+  // 4. Select product
+  await sendTestWebhook("1");
+  // 5. Add to cart
+  await sendTestWebhook("1");
+  // 6. Checkout
+  await sendTestWebhook("1");
+}
+```
+
+---
+
+## 📊 Logging Rules
+
+### Logging Patterns
+
+#### ✅ REQUIRED: Structured Logging
+
+**ALWAYS** use structured logging:
+
+```javascript
+// ✅ DO: Structured logs
+console.log(`📨 Message from ${phone}: ${message}`);
+console.log(`🔄 Routing to service: ${user.current_service}, step: ${user.current_step}`);
+console.log(`✅ Message sent to ${phone}`);
+console.error(`❌ Error in service flow:`, error);
+
+// ✅ DO: Log important events
+console.log(`👤 New user created: ${phone}`);
+console.log(`💳 Payment initiated: Order #${orderNumber}`);
+console.log(`📦 Order completed: Order #${orderNumber}`);
+```
+
+#### ✅ REQUIRED: Error Logging
+
+**ALWAYS** log errors with context:
+
+```javascript
+// ✅ DO: Log errors with context
+try {
+  await this.processOrder(user, orderId);
+} catch (error) {
+  console.error("Order processing error:", {
+    userId: user.id,
+    phone: user.phone,
+    orderId: orderId,
+    error: error.message,
+    stack: error.stack
+  });
+  throw error;
+}
+```
+
+---
+
+## 🚀 Deployment Rules
+
+### Production Checklist
+
+#### ✅ REQUIRED: Pre-Deployment Checklist
+
+**ALWAYS** verify before deploying:
+
+- [ ] Green API credentials configured
+- [ ] Webhook URL set in Green API dashboard
+- [ ] Database migrations applied
+- [ ] Environment variables set
+- [ ] Health endpoint working
+- [ ] Test webhook received successfully
+- [ ] Test message sent successfully
+- [ ] Error handling tested
+- [ ] Rate limiting configured
+- [ ] Logging configured
+
+### Webhook URL Configuration
+
+#### ✅ REQUIRED: Production Webhook URL
+
+**ALWAYS** use HTTPS for webhook URLs:
+
+```bash
+# ✅ DO: HTTPS webhook URL
+https://your-domain.com/webhooks/greenapi
+
+# ❌ DON'T: HTTP webhook URL (not secure)
+http://your-domain.com/webhooks/greenapi
+```
+
+---
+
+## 🎯 Best Practices Summary
+
+### ✅ DO:
+
+1. **Always validate webhook data** before processing
+2. **Always use parameterized SQL queries** to prevent injection
+3. **Always normalize phone numbers** consistently
+4. **Always refresh user objects** after state updates
+5. **Always use templates** for messages
+6. **Always handle errors gracefully** without crashing
+7. **Always update user state** when navigating
+8. **Always support universal commands** (menu, help, back)
+9. **Always implement rate limiting** to prevent abuse
+10. **Always log important events** for debugging
+
+### ❌ DON'T:
+
+1. **Don't process non-text messages** without handling
+2. **Don't use string concatenation** for SQL queries
+3. **Don't use stale user objects** after updates
+4. **Don't hardcode messages** - use templates
+5. **Don't let errors crash** the webhook handler
+6. **Don't skip input validation** - always validate
+7. **Don't expose sensitive data** in error messages
+8. **Don't forget to update state** when navigating
+9. **Don't send messages** without error handling
+10. **Don't skip rate limiting** - always implement it
+
+---
+
+## 📚 Reference Examples
+
+### Complete Handler Example
+
+See `backend/src/services/greenapi/handler.js` for complete implementation.
+
+### Complete Service Example
+
+See `backend/src/services/shopping/index.js` for complete service pattern.
+
+### Complete Template Example
+
+See `backend/src/templates/whatsapp/shopping.js` for template patterns.
+
+---
+
+## 🔗 Related Documentation
+
+- **Green API Documentation**: https://green-api.com/en/docs/
+- **Green API Console**: https://console.green-api.com/
+- **MuntuShop Platform Rules**: `muntushop-platform-rules.mdc`
+- **README.md** - Project documentation
+
+---
+
+**Last Updated**: December 19, 2024  
+**Version**: 1.0.0  
+**Status**: Active  
+**Based on**: MuntuShop Platform Production Implementation

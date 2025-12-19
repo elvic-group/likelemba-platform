@@ -1,0 +1,958 @@
+---
+description: Comprehensive rules for preventing WhatsApp account blocking and maintaining Green API instance authorization - warm-up procedures, mailing best practices, rate limiting, and typing indicators
+globs: 
+  - "backend/src/config/greenapi.js"
+  - "backend/src/services/greenapi/**/*.js"
+  - "backend/src/services/**/*.js"
+  - "backend/src/routes/api/messaging.js"
+alwaysApply: true
+---
+
+# Green API Anti-Blocking & Account Protection Rules
+
+<author>MuntuShop Development Team</author>
+<version>1.0.0</version>
+
+## Context
+
+- Complete guide for preventing WhatsApp account blocking and maintaining Green API instance authorization
+- Covers account warm-up procedures, mailing best practices, rate limiting, typing indicators, and unsubscribe handling
+- Based on official Green API recommendations and production-tested patterns
+- Critical for maintaining WhatsApp business account health and avoiding bans
+
+---
+
+## 🚨 Critical: Account Protection Overview
+
+### Why Accounts Get Blocked
+
+WhatsApp monitors account behavior to prevent spam and abuse. Common causes:
+- Sending too many messages too quickly
+- Sending to non-contacts without prior interaction
+- Using new/unwarmed accounts for bulk messaging
+- Not providing unsubscribe options
+- Suspicious activity patterns
+
+### Protection Strategy
+
+1. **Account Warm-Up** - Gradually increase message volume
+2. **Rate Limiting** - Control message sending speed
+3. **Typing Indicators** - Simulate human behavior
+4. **Unsubscribe Options** - Allow users to opt-out
+5. **Contact Management** - Track user relationships
+
+---
+
+## 🔥 Account Warm-Up Rules
+
+### New or Unblocked Account Procedure
+
+#### ✅ REQUIRED: Initial Wait Period
+
+**ALWAYS** wait 24 hours after account creation/unblocking:
+
+```javascript
+// ✅ DO: Track account creation date
+const accountCreatedAt = new Date('2024-12-19');
+const hoursSinceCreation = (Date.now() - accountCreatedAt) / (1000 * 60 * 60);
+
+if (hoursSinceCreation < 24) {
+  console.log('⚠️ Account too new - waiting for 24-hour period');
+  return; // Don't connect instance or send messages
+}
+```
+
+#### ✅ REQUIRED: 10-Day Warm-Up Sequence
+
+**ALWAYS** follow this exact warm-up sequence:
+
+**Day 1 (After 24-hour wait):**
+- ✅ Authorize instance
+- ❌ DO NOT send messages from API
+- ❌ DO NOT connect additional devices (web/desktop)
+
+**Day 2-4 (Warm-Up Phase 1):**
+- ✅ People write TO the number from other accounts
+- ✅ Messages every 2 hours
+- ✅ Use different contact accounts
+- ❌ Number does NOT write back yet
+
+**Day 5-11 (Warm-Up Phase 2):**
+- ✅ Number starts writing back
+- ✅ Messages every 2 hours
+- ✅ Only to numbers in contacts
+- ✅ Gradually increase volume:
+  - Days 5-6: 12 messages/day
+  - Days 7-8: 25 messages/day
+  - Days 9-10: 50 messages/day
+  - Day 11+: Up to 100 messages/day
+
+#### ✅ REQUIRED: Warm-Up Implementation
+
+**ALWAYS** implement warm-up tracking:
+
+```javascript
+// backend/src/services/greenapi/warmup.js
+const db = require("../../config/database");
+
+class AccountWarmup {
+  async checkWarmupStatus(phone) {
+    const result = await db.query(
+      `SELECT 
+        account_created_at,
+        warmup_started_at,
+        warmup_phase,
+        messages_sent_today,
+        last_message_sent_at
+      FROM account_warmup 
+      WHERE phone = $1`,
+      [phone]
+    );
+
+    const status = result.rows[0];
+    if (!status) return null;
+
+    const now = new Date();
+    const daysSinceStart = (now - status.warmup_started_at) / (1000 * 60 * 60 * 24);
+
+    return {
+      ...status,
+      daysSinceStart: Math.floor(daysSinceStart),
+      canSendMessages: this.canSendMessages(status, daysSinceStart),
+      maxMessagesToday: this.getMaxMessagesToday(daysSinceStart)
+    };
+  }
+
+  canSendMessages(status, daysSinceStart) {
+    // Day 1: No messages
+    if (daysSinceStart < 1) return false;
+    
+    // Days 2-4: Only receive, don't send
+    if (daysSinceStart >= 1 && daysSinceStart < 4) return false;
+    
+    // Days 5+: Can send with limits
+    return daysSinceStart >= 4;
+  }
+
+  getMaxMessagesToday(daysSinceStart) {
+    if (daysSinceStart < 5) return 0;
+    if (daysSinceStart < 7) return 12;
+    if (daysSinceStart < 9) return 25;
+    if (daysSinceStart < 11) return 50;
+    return 100; // After 10 days
+  }
+
+  async recordMessageSent(phone) {
+    await db.query(
+      `UPDATE account_warmup 
+       SET messages_sent_today = messages_sent_today + 1,
+           last_message_sent_at = NOW()
+       WHERE phone = $1`,
+      [phone]
+    );
+  }
+}
+
+module.exports = new AccountWarmup();
+```
+
+#### ✅ REQUIRED: Warm-Up Database Schema
+
+**ALWAYS** create warm-up tracking table:
+
+```sql
+-- database/migrations/add_account_warmup.sql
+CREATE TABLE IF NOT EXISTS account_warmup (
+  id SERIAL PRIMARY KEY,
+  phone VARCHAR(20) UNIQUE NOT NULL,
+  account_created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  warmup_started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  warmup_phase VARCHAR(50) DEFAULT 'waiting', -- waiting, receiving, sending
+  messages_sent_today INTEGER DEFAULT 0,
+  messages_received_today INTEGER DEFAULT 0,
+  last_message_sent_at TIMESTAMP,
+  last_message_received_at TIMESTAMP,
+  is_warmed_up BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_account_warmup_phone ON account_warmup(phone);
+CREATE INDEX idx_account_warmup_phase ON account_warmup(warmup_phase);
+```
+
+---
+
+## 📨 Mailing List Rules
+
+### Unsubscribe Handling
+
+#### ✅ REQUIRED: Include Unsubscribe Option
+
+**ALWAYS** include unsubscribe text in every mailing:
+
+```javascript
+// ✅ DO: Add unsubscribe text to all mailings
+const mailingMessage = `
+🎉 Special Offer!
+
+Get 50% off on all products today!
+
+${productDetails}
+
+---
+If you do not want to receive our favorable offers, write STOP
+`.trim();
+
+// ❌ DON'T: Send mailings without unsubscribe option
+const badMailing = "Special offer! Buy now!"; // Missing unsubscribe
+```
+
+#### ✅ REQUIRED: Unsubscribe Keywords
+
+**ALWAYS** handle multiple unsubscribe keywords:
+
+```javascript
+// ✅ DO: Handle multiple unsubscribe keywords
+const unsubscribeKeywords = [
+  'stop',
+  'unsubscribe',
+  'cancel',
+  'optout',
+  'opt out',
+  'remove',
+  'quit'
+];
+
+async handleUnsubscribe(phone, message) {
+  const msg = message.toLowerCase().trim();
+  
+  if (unsubscribeKeywords.some(keyword => msg.includes(keyword))) {
+    await this.markUnsubscribed(phone);
+    await this.sendMessage(
+      phone,
+      "✅ You have been unsubscribed from our mailing list. Reply SUBSCRIBE to opt back in."
+    );
+    return true;
+  }
+  
+  return false;
+}
+
+async markUnsubscribed(phone) {
+  await db.query(
+    `UPDATE users 
+     SET is_subscribed = FALSE, 
+         unsubscribed_at = NOW() 
+     WHERE phone = $1`,
+    [phone]
+  );
+}
+```
+
+#### ✅ REQUIRED: Check Subscription Status
+
+**ALWAYS** check subscription before sending mailings:
+
+```javascript
+// ✅ DO: Verify subscription before mailing
+async sendMailing(phone, message) {
+  const user = await this.getUser(phone);
+  
+  if (!user || user.is_subscribed === false) {
+    console.log(`⏭️ Skipping mailing to ${phone} - user unsubscribed`);
+    return;
+  }
+  
+  // Send mailing
+  await this.sendMessage(phone, message);
+}
+```
+
+---
+
+## ⏱️ Message Sending Interval Rules
+
+### Rate Limiting Configuration
+
+#### ✅ REQUIRED: Set Sending Interval
+
+**ALWAYS** set interval for queue-based mailings:
+
+```javascript
+// ✅ DO: Configure sending interval (10-15 seconds)
+// Set in Green API Console: https://console.green-api.com/
+// Or via API: delaySendMessagesMilliseconds parameter
+
+// Recommended: 10000-15000ms (10-15 seconds) between messages
+const SENDING_INTERVAL_MS = 12000; // 12 seconds default
+
+// ✅ DO: Implement queue with delays
+class MessageQueue {
+  constructor() {
+    this.queue = [];
+    this.processing = false;
+    this.interval = SENDING_INTERVAL_MS;
+  }
+
+  async addMessage(phone, message) {
+    this.queue.push({ phone, message, timestamp: Date.now() });
+    if (!this.processing) {
+      this.processQueue();
+    }
+  }
+
+  async processQueue() {
+    this.processing = true;
+    
+    while (this.queue.length > 0) {
+      const item = this.queue.shift();
+      
+      try {
+        await this.sendMessage(item.phone, item.message);
+        console.log(`✅ Message sent to ${item.phone}`);
+      } catch (error) {
+        console.error(`❌ Error sending to ${item.phone}:`, error);
+      }
+      
+      // Wait before next message
+      if (this.queue.length > 0) {
+        await this.sleep(this.interval);
+      }
+    }
+    
+    this.processing = false;
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+```
+
+#### ✅ REQUIRED: Configure in Green API Console
+
+**ALWAYS** set interval in Green API dashboard:
+
+1. Go to: https://console.green-api.com/
+2. Select your instance
+3. Navigate to "Settings" or "Queue Settings"
+4. Set "Delay between messages" to: **10000-15000 ms**
+5. Save settings
+
+#### ✅ REQUIRED: API Configuration
+
+**ALWAYS** configure via API if available:
+
+```javascript
+// ✅ DO: Set delay via GetSettings/SetSettings API
+// Reference: https://green-api.com/en/docs/api/account/GetSettings/
+
+async configureSendingInterval() {
+  try {
+    // Get current settings
+    const settings = await greenAPI.account.getSettings();
+    
+    // Update delay (if API supports it)
+    // Note: Check Green API documentation for exact method
+    await greenAPI.account.setSettings({
+      delaySendMessagesMilliseconds: 12000 // 12 seconds
+    });
+    
+    console.log('✅ Sending interval configured: 12000ms');
+  } catch (error) {
+    console.error('❌ Error configuring interval:', error);
+  }
+}
+```
+
+---
+
+## ⌨️ Typing Indicators Rules
+
+### Simulate Human Behavior
+
+#### ✅ REQUIRED: Use Typing Indicators
+
+**ALWAYS** add typing indicators before sending messages:
+
+```javascript
+// ✅ DO: Send typing indicator before message
+async sendMessageWithTyping(phone, message, typingDuration = 2000) {
+  try {
+    // 1. Send typing indicator
+    await greenAPI.service.sendTyping({
+      chatId: `${phone}@c.us`,
+      typingTime: typingDuration // milliseconds (1000-5000 recommended)
+    });
+    
+    // 2. Wait for typing duration
+    await this.sleep(typingDuration);
+    
+    // 3. Send actual message
+    await greenAPI.message.sendMessage(`${phone}@c.us`, null, message);
+    
+    console.log(`✅ Message sent with typing indicator to ${phone}`);
+  } catch (error) {
+    console.error(`❌ Error sending message with typing:`, error);
+  }
+}
+
+// Usage
+await sendMessageWithTyping(phone, "Hello! How can I help?", 2000);
+```
+
+#### ✅ REQUIRED: Typing Time Calculation
+
+**ALWAYS** calculate typing time based on message length:
+
+```javascript
+// ✅ DO: Calculate typing time based on message length
+function calculateTypingTime(message) {
+  // Average typing speed: 40 words per minute
+  // Average word length: 5 characters
+  const words = message.split(/\s+/).length;
+  const estimatedTime = (words / 40) * 60 * 1000; // Convert to milliseconds
+  
+  // Minimum 1 second, maximum 5 seconds
+  return Math.max(1000, Math.min(5000, Math.ceil(estimatedTime)));
+}
+
+async sendMessageWithSmartTyping(phone, message) {
+  const typingTime = calculateTypingTime(message);
+  
+  await greenAPI.service.sendTyping({
+    chatId: `${phone}@c.us`,
+    typingTime: typingTime
+  });
+  
+  await this.sleep(typingTime);
+  await greenAPI.message.sendMessage(`${phone}@c.us`, null, message);
+}
+```
+
+#### ✅ REQUIRED: Update SendMessage Method
+
+**ALWAYS** use typingTime parameter in SendMessage:
+
+```javascript
+// ✅ DO: Use typingTime in SendMessage
+// Reference: https://green-api.com/en/docs/api/sending/SendMessage/
+
+async sendMessage(phone, text, options = {}) {
+  try {
+    const typingTime = options.typingTime || calculateTypingTime(text);
+    
+    await greenAPI.message.sendMessage(
+      `${phone}@c.us`,
+      null,
+      text,
+      {
+        typingTime: typingTime // Add typing indicator
+      }
+    );
+    
+    console.log(`✅ Message sent with ${typingTime}ms typing to ${phone}`);
+  } catch (error) {
+    console.error(`❌ Error sending message:`, error);
+    throw error;
+  }
+}
+```
+
+---
+
+## 🚦 Rate Limiting Rules
+
+### API Rate Limits
+
+#### ✅ REQUIRED: Understand Rate Limits
+
+**ALWAYS** respect Green API rate limits:
+
+```javascript
+// ✅ DO: Implement rate limiting
+// Reference: https://green-api.com/en/docs/api/ratelimiter/
+
+class RateLimiter {
+  constructor() {
+    this.requests = new Map(); // endpoint -> { count, resetAt }
+    this.limits = {
+      // Example limits (check Green API docs for actual limits)
+      sendMessage: { max: 100, window: 60000 }, // 100 per minute
+      getMessages: { max: 200, window: 60000 }, // 200 per minute
+    };
+  }
+
+  async checkLimit(endpoint) {
+    const limit = this.limits[endpoint];
+    if (!limit) return true; // No limit defined
+
+    const now = Date.now();
+    const key = endpoint;
+    const record = this.requests.get(key);
+
+    if (!record || now > record.resetAt) {
+      // Reset window
+      this.requests.set(key, {
+        count: 1,
+        resetAt: now + limit.window
+      });
+      return true;
+    }
+
+    if (record.count >= limit.max) {
+      const waitTime = record.resetAt - now;
+      console.log(`⏳ Rate limit reached for ${endpoint}. Wait ${waitTime}ms`);
+      return false;
+    }
+
+    record.count++;
+    return true;
+  }
+
+  async waitForLimit(endpoint) {
+    while (!(await this.checkLimit(endpoint))) {
+      const record = this.requests.get(endpoint);
+      const waitTime = record.resetAt - Date.now();
+      await this.sleep(waitTime);
+    }
+  }
+}
+
+// Usage
+const rateLimiter = new RateLimiter();
+
+async sendMessage(phone, text) {
+  await rateLimiter.waitForLimit('sendMessage');
+  await greenAPI.message.sendMessage(`${phone}@c.us`, null, text);
+}
+```
+
+#### ✅ REQUIRED: Handle Rate Limit Errors
+
+**ALWAYS** handle rate limit errors gracefully:
+
+```javascript
+// ✅ DO: Handle rate limit errors
+async sendMessageWithRetry(phone, text, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await greenAPI.message.sendMessage(`${phone}@c.us`, null, text);
+      return; // Success
+    } catch (error) {
+      if (error.statusCode === 429) { // Rate limit error
+        const retryAfter = error.retryAfter || 60000; // Default 1 minute
+        console.log(`⏳ Rate limited. Waiting ${retryAfter}ms before retry ${attempt}/${maxRetries}`);
+        await this.sleep(retryAfter);
+        continue;
+      }
+      throw error; // Other errors
+    }
+  }
+  throw new Error('Max retries reached for rate limit');
+}
+```
+
+---
+
+## 🔄 Instance Logout Prevention
+
+### Handling Frequent Logouts
+
+#### ✅ REQUIRED: Monitor Instance Status
+
+**ALWAYS** monitor instance connection status:
+
+```javascript
+// ✅ DO: Handle deviceStatus webhook
+router.post("/greenapi", async (req, res) => {
+  const { typeWebhook } = req.body;
+  
+  if (typeWebhook === "deviceStatus") {
+    const { stateInstance } = req.body;
+    
+    if (stateInstance === "notAuthorized") {
+      console.error("❌ Instance logged out!");
+      // Handle logout: notify admin, stop sending messages
+      await handleInstanceLogout();
+    } else if (stateInstance === "authorized") {
+      console.log("✅ Instance authorized");
+    }
+  }
+  
+  // Handle other webhook types...
+  res.sendStatus(200);
+});
+```
+
+#### ✅ REQUIRED: Logout Recovery Procedure
+
+**ALWAYS** follow recovery procedure after logout:
+
+```javascript
+// ✅ DO: Recovery procedure after logout
+async handleInstanceLogout() {
+  console.log("⚠️ Instance logged out - starting recovery procedure");
+  
+  // 1. Stop all message sending
+  await stopAllMessageSending();
+  
+  // 2. Wait 24 hours
+  console.log("⏳ Waiting 24 hours before reconnecting...");
+  // In production, use a job queue or scheduled task
+  
+  // 3. After 24 hours, restart warm-up process
+  // 4. Follow warm-up sequence from Day 1
+}
+```
+
+---
+
+## 📊 Contact Management Rules
+
+### Relationship Tracking
+
+#### ✅ REQUIRED: Track Contact Relationships
+
+**ALWAYS** track whether users are in contacts:
+
+```javascript
+// ✅ DO: Track contact relationships
+async isInContacts(phone) {
+  // Check if phone is in WhatsApp contacts
+  // This should be tracked when user first messages you
+  const result = await db.query(
+    `SELECT is_in_contacts FROM users WHERE phone = $1`,
+    [phone]
+  );
+  
+  return result.rows[0]?.is_in_contacts || false;
+}
+
+// Mark as contact when user first messages
+async handleFirstMessage(phone) {
+  await db.query(
+    `UPDATE users 
+     SET is_in_contacts = TRUE,
+         first_contact_at = NOW()
+     WHERE phone = $1`,
+    [phone]
+  );
+}
+```
+
+#### ✅ REQUIRED: Prioritize Contacts
+
+**ALWAYS** prioritize messages to contacts during warm-up:
+
+```javascript
+// ✅ DO: Prioritize contacts during warm-up
+async sendMessageDuringWarmup(phone, message) {
+  const warmupStatus = await accountWarmup.checkWarmupStatus(phone);
+  const isContact = await this.isInContacts(phone);
+  
+  // During warm-up, only send to contacts
+  if (warmupStatus && warmupStatus.daysSinceStart < 11) {
+    if (!isContact) {
+      console.log(`⏭️ Skipping ${phone} - not in contacts during warm-up`);
+      return;
+    }
+  }
+  
+  await this.sendMessage(phone, message);
+}
+```
+
+---
+
+## 🛡️ Additional Protection Rules
+
+### Best Practices
+
+#### ✅ REQUIRED: Avoid Additional Devices
+
+**ALWAYS** avoid connecting additional devices during warm-up:
+
+```javascript
+// ✅ DO: Document device connection policy
+/**
+ * DEVICE CONNECTION POLICY:
+ * 
+ * During warm-up (first 10 days):
+ * - DO NOT connect web version
+ * - DO NOT connect desktop version
+ * - DO NOT use WhatsApp Web
+ * 
+ * After warm-up:
+ * - Can connect additional devices
+ * - But monitor for logout issues
+ */
+```
+
+#### ✅ REQUIRED: Gradual Volume Increase
+
+**ALWAYS** gradually increase message volume:
+
+```javascript
+// ✅ DO: Gradual volume increase
+function getMaxMessagesForDay(dayNumber) {
+  if (dayNumber < 5) return 0;
+  if (dayNumber < 7) return 12;
+  if (dayNumber < 9) return 25;
+  if (dayNumber < 11) return 50;
+  if (dayNumber < 15) return 75;
+  return 100; // After 15 days
+}
+
+async checkDailyLimit(phone) {
+  const warmupStatus = await accountWarmup.checkWarmupStatus(phone);
+  const maxMessages = getMaxMessagesForDay(warmupStatus.daysSinceStart);
+  
+  if (warmupStatus.messages_sent_today >= maxMessages) {
+    throw new Error(`Daily limit reached: ${maxMessages} messages`);
+  }
+}
+```
+
+#### ✅ REQUIRED: Message Content Quality
+
+**ALWAYS** ensure message content quality:
+
+```javascript
+// ✅ DO: Validate message content
+function validateMessageContent(message) {
+  // Avoid spam-like patterns
+  const spamPatterns = [
+    /FREE/i,
+    /URGENT/i,
+    /CLICK HERE/i,
+    /WINNER/i,
+    /!!!{3,}/, // Multiple exclamation marks
+  ];
+  
+  for (const pattern of spamPatterns) {
+    if (pattern.test(message)) {
+      console.warn('⚠️ Message contains potential spam pattern');
+      // Still send, but log warning
+    }
+  }
+  
+  // Ensure message has unsubscribe option for mailings
+  if (message.length > 100 && !message.includes('STOP') && !message.includes('unsubscribe')) {
+    console.warn('⚠️ Long message without unsubscribe option');
+  }
+  
+  return true;
+}
+```
+
+---
+
+## 📋 Implementation Checklist
+
+### Complete Protection Setup
+
+#### ✅ REQUIRED: Setup Checklist
+
+**ALWAYS** complete this checklist:
+
+- [ ] Account warm-up tracking table created
+- [ ] Warm-up status checking implemented
+- [ ] Message sending limits enforced
+- [ ] Unsubscribe handling implemented
+- [ ] Typing indicators added to all messages
+- [ ] Sending interval configured (10-15 seconds)
+- [ ] Rate limiting implemented
+- [ ] Contact relationship tracking
+- [ ] Instance status monitoring
+- [ ] Daily message limits enforced
+- [ ] Message content validation
+- [ ] Logout recovery procedure documented
+
+---
+
+## 🔧 Code Integration Examples
+
+### Complete Implementation
+
+#### ✅ REQUIRED: Enhanced SendMessage Function
+
+**ALWAYS** use this enhanced sendMessage pattern:
+
+```javascript
+// backend/src/services/greenapi/safeMessaging.js
+const greenAPI = require("../../config/greenapi");
+const accountWarmup = require("./warmup");
+const rateLimiter = new RateLimiter();
+
+class SafeMessaging {
+  async sendMessage(phone, text, options = {}) {
+    try {
+      // 1. Check warm-up status
+      const warmupStatus = await accountWarmup.checkWarmupStatus(phone);
+      if (warmupStatus && !warmupStatus.canSendMessages) {
+        throw new Error('Account not warmed up yet');
+      }
+      
+      // 2. Check daily limit
+      if (warmupStatus && warmupStatus.messages_sent_today >= warmupStatus.maxMessagesToday) {
+        throw new Error('Daily message limit reached');
+      }
+      
+      // 3. Check rate limit
+      await rateLimiter.waitForLimit('sendMessage');
+      
+      // 4. Validate content
+      validateMessageContent(text);
+      
+      // 5. Calculate typing time
+      const typingTime = calculateTypingTime(text);
+      
+      // 6. Send typing indicator
+      await greenAPI.service.sendTyping({
+        chatId: `${phone}@c.us`,
+        typingTime: typingTime
+      });
+      
+      await this.sleep(typingTime);
+      
+      // 7. Send message
+      await greenAPI.message.sendMessage(
+        `${phone}@c.us`,
+        null,
+        text,
+        {
+          typingTime: typingTime
+        }
+      );
+      
+      // 8. Record message sent
+      await accountWarmup.recordMessageSent(phone);
+      
+      console.log(`✅ Safe message sent to ${phone}`);
+    } catch (error) {
+      console.error(`❌ Error in safe messaging:`, error);
+      throw error;
+    }
+  }
+  
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+module.exports = new SafeMessaging();
+```
+
+---
+
+## 📚 Reference Links
+
+### Official Green API Documentation
+
+- **How to protect number from ban**: https://green-api.com/en/docs/faq/how-to-protect-number-from-ban/
+- **Why is there re-blocking**: https://green-api.com/en/docs/faq/why-is-re-blocking-happening/
+- **How to make mailings without risk**: https://green-api.com/en/docs/faq/how-to-make-mailings-without-the-risk-of-blocking/
+- **How to implement mailings via CRM**: https://green-api.com/en/docs/faq/how-to-implement-mailings-via-crm/
+- **Rate Limiter Documentation**: https://green-api.com/en/docs/api/ratelimiter/
+- **SendMessage with typingTime**: https://green-api.com/en/docs/api/sending/SendMessage/
+- **SendTyping Method**: https://green-api.com/en/docs/api/service/SendTyping/
+- **GetSettings Method**: https://green-api.com/en/docs/api/account/GetSettings/
+
+---
+
+## 🎯 Best Practices Summary
+
+### ✅ DO:
+
+1. **Always wait 24 hours** after account creation/unblocking
+2. **Always follow 10-day warm-up** sequence strictly
+3. **Always include unsubscribe** option in mailings
+4. **Always set sending interval** to 10-15 seconds
+5. **Always use typing indicators** before messages
+6. **Always respect rate limits** from Green API
+7. **Always track contact relationships** for warm-up
+8. **Always monitor instance status** for logouts
+9. **Always gradually increase** message volume
+10. **Always validate message content** for spam patterns
+
+### ❌ DON'T:
+
+1. **Don't send messages** during first 24 hours
+2. **Don't connect additional devices** during warm-up
+3. **Don't send mailings** without unsubscribe option
+4. **Don't send messages** faster than 10 seconds apart
+5. **Don't skip typing indicators** - they simulate human behavior
+6. **Don't ignore rate limits** - you'll get blocked
+7. **Don't send to non-contacts** during warm-up
+8. **Don't ignore logout events** - restart warm-up
+9. **Don't jump to high volume** immediately
+10. **Don't use spam-like content** in messages
+
+---
+
+## 🚨 Emergency Procedures
+
+### If Account Gets Blocked
+
+#### ✅ REQUIRED: Block Recovery Process
+
+**ALWAYS** follow this if account gets blocked:
+
+1. **Stop All Activity**
+   ```javascript
+   // Immediately stop all message sending
+   await stopAllMessageSending();
+   ```
+
+2. **Wait 24 Hours**
+   - Do not attempt to reconnect
+   - Do not send any messages
+   - Do not connect additional devices
+
+3. **Restart Warm-Up**
+   - Follow complete 10-day warm-up sequence
+   - Start from Day 1 (authorize but don't send)
+   - Gradually increase volume
+
+4. **Review Practices**
+   - Check if unsubscribe was included
+   - Verify sending intervals were followed
+   - Review message content for spam patterns
+
+---
+
+## 📊 Monitoring & Alerts
+
+### Status Monitoring
+
+#### ✅ REQUIRED: Monitor Account Health
+
+**ALWAYS** monitor these metrics:
+
+```javascript
+// ✅ DO: Monitor account health
+async getAccountHealth() {
+  const warmupStatus = await accountWarmup.checkWarmupStatus(phone);
+  const todayMessages = warmupStatus.messages_sent_today;
+  const maxMessages = warmupStatus.maxMessagesToday;
+  const utilization = (todayMessages / maxMessages) * 100;
+  
+  return {
+    isWarmedUp: warmupStatus.daysSinceStart >= 10,
+    daysSinceStart: warmupStatus.daysSinceStart,
+    messagesToday: todayMessages,
+    maxMessages: maxMessages,
+    utilization: utilization,
+    status: utilization > 90 ? 'warning' : 'healthy'
+  };
+}
+```
+
+---
+
+**Last Updated**: December 19, 2024  
+**Version**: 1.0.0  
+**Status**: Active  
+**Based on**: Official Green API Recommendations & MuntuShop Production Experience

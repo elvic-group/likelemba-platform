@@ -1,0 +1,731 @@
+---
+description: Comprehensive rules and standards for MuntuShop WhatsApp Platform development
+globs: 
+  - "backend/**/*.js"
+  - "backend/**/*.sql"
+  - "*.md"
+alwaysApply: true
+---
+
+# MuntuShop Platform Development Rules
+
+<author>MuntuShop Development Team</author>
+<version>1.0.0</version>
+
+## Context
+
+- Complete development standards for MuntuShop WhatsApp-based multi-service platform
+- Ensures consistency, security, and maintainability across all 11 services
+- Covers backend architecture, services, database, payments, WhatsApp integration, and deployment
+
+---
+
+## 🏗️ Architecture Rules
+
+### Project Structure
+
+- **ALWAYS** work from `backend/src/` directory for application code
+- **ALWAYS** follow the existing service pattern: Route → Service → Template
+- **NEVER** create duplicate service implementations
+- **ALWAYS** place new services in `backend/src/services/[service-name]/index.js`
+- **ALWAYS** create corresponding route in `backend/src/routes/api/[service].js`
+- **ALWAYS** create templates in `backend/src/templates/whatsapp/[service].js`
+
+### Service Architecture Pattern
+
+Each service MUST follow this structure:
+
+```javascript
+// backend/src/services/[service]/index.js
+const db = require("../../config/database");
+const greenAPI = require("../../config/greenapi");
+const templates = require("../../templates/whatsapp");
+
+class ServiceName {
+  async handleMessage(user, message) {
+    const step = user.current_step;
+    const msg = message.toLowerCase().trim();
+
+    // Navigation commands
+    if (msg === "0" || msg === "back") {
+      return await this.goBack(user);
+    }
+    if (msg === "menu") {
+      return await this.showMainMenu(user);
+    }
+
+    // Route based on step
+    switch (step) {
+      case "menu":
+        return await this.handleMenuSelection(user, msg);
+      default:
+        return await this.showMenu(user);
+    }
+  }
+
+  async showMenu(user) {
+    await this.updateUserStep(user.id, "menu");
+    const menu = templates.serviceName.menu();
+    await this.sendMessage(user.phone, menu);
+  }
+
+  async sendMessage(phone, text) {
+    await greenAPI.message.sendMessage(`${phone}@c.us`, null, text);
+  }
+}
+
+module.exports = new ServiceName();
+```
+
+---
+
+## 💻 Code Standards
+
+### JavaScript/Node.js Rules
+
+#### ✅ REQUIRED: Use async/await
+
+```javascript
+// ✅ DO: Use async/await
+async function getUser(id) {
+  const result = await db.query("SELECT * FROM users WHERE id = $1", [id]);
+  return result.rows[0];
+}
+
+// ❌ DON'T: Use callbacks
+function getUser(id, callback) {
+  db.query("SELECT * FROM users WHERE id = $1", [id], (err, result) => {
+    callback(err, result.rows[0]);
+  });
+}
+```
+
+#### ✅ REQUIRED: Parameterized SQL Queries
+
+**ALWAYS** use parameterized queries to prevent SQL injection:
+
+```javascript
+// ✅ DO: Parameterized queries
+const result = await db.query("SELECT * FROM users WHERE phone = $1", [phone]);
+
+// ❌ DON'T: String concatenation (SQL injection risk)
+const result = await db.query(`SELECT * FROM users WHERE phone = '${phone}'`);
+```
+
+#### ✅ REQUIRED: Error Handling
+
+**ALWAYS** wrap database operations and async functions in try-catch:
+
+```javascript
+// ✅ DO: Proper error handling
+async function serviceMethod() {
+  try {
+    const result = await db.query(query, params);
+    return result.rows;
+  } catch (error) {
+    console.error("Service error:", error);
+    throw error; // Let route handler catch it
+  }
+}
+
+// Route handler
+router.get("/endpoint", async (req, res) => {
+  try {
+    const data = await serviceMethod();
+    res.json(data);
+  } catch (error) {
+    console.error("Route error:", error);
+    res.status(500).json({
+      error: error.message,
+      code: "INTERNAL_ERROR",
+    });
+  }
+});
+```
+
+#### ✅ REQUIRED: Descriptive Naming
+
+- **ALWAYS** use descriptive names, no abbreviations
+- **ALWAYS** use camelCase for variables and functions
+- **ALWAYS** use PascalCase for classes
+- **ALWAYS** use UPPER_SNAKE_CASE for constants
+
+```javascript
+// ✅ DO: Descriptive names
+async function getUserByPhoneNumber(phoneNumber) {
+  // ...
+}
+
+// ❌ DON'T: Abbreviations
+async function getUsrByPhn(phn) {
+  // ...
+}
+```
+
+#### ✅ REQUIRED: Single Responsibility
+
+- **ONE service per file**
+- **ONE responsibility per function**
+- **Group related functions together**
+
+---
+
+## 🗄️ Database Rules
+
+### Query Patterns
+
+#### ✅ REQUIRED: Use RETURNING for Inserts
+
+```javascript
+// ✅ DO: Use RETURNING
+const result = await db.query(
+  `INSERT INTO products (name, price) VALUES ($1, $2) RETURNING *`,
+  [name, price]
+);
+const newProduct = result.rows[0];
+
+// ❌ DON'T: Separate SELECT after INSERT
+await db.query(`INSERT INTO products (name, price) VALUES ($1, $2)`, [name, price]);
+const result = await db.query(`SELECT * FROM products WHERE name = $1`, [name]);
+```
+
+#### ✅ REQUIRED: Use Transactions for Multiple Operations
+
+```javascript
+// ✅ DO: Use transactions for related operations
+const client = await db.connect();
+try {
+  await client.query("BEGIN");
+  await client.query("INSERT INTO orders ...", [...]);
+  await client.query("INSERT INTO order_items ...", [...]);
+  await client.query("UPDATE products SET stock = stock - 1 ...", [...]);
+  await client.query("COMMIT");
+} catch (error) {
+  await client.query("ROLLBACK");
+  throw error;
+} finally {
+  client.release();
+}
+```
+
+#### ✅ REQUIRED: Always Update `updated_at` Timestamp
+
+```javascript
+// ✅ DO: Update timestamp
+await db.query(
+  `UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2`,
+  [name, userId]
+);
+```
+
+### Migration Rules
+
+- **ALWAYS** create migration files in `database/migrations/`
+- **ALWAYS** name migrations: `add_[feature_name].sql` or `update_[table_name]_[feature].sql`
+- **ALWAYS** include rollback instructions in migration comments
+- **NEVER** modify existing migrations, create new ones instead
+
+---
+
+## 🔌 API Rules
+
+### Route Structure
+
+- **ALWAYS** prefix API routes with `/api/v1/`
+- **ALWAYS** use RESTful conventions:
+  - `GET /api/v1/products` - List all
+  - `GET /api/v1/products/:id` - Get one
+  - `POST /api/v1/products` - Create
+  - `PUT /api/v1/products/:id` - Update
+  - `DELETE /api/v1/products/:id` - Delete
+
+### Response Format
+
+#### ✅ REQUIRED: Standard Success Response
+
+```javascript
+// ✅ DO: Standard success format
+res.json({
+  data: result,
+  message: "Success message"
+});
+```
+
+#### ✅ REQUIRED: Standard Error Response
+
+```javascript
+// ✅ DO: Standard error format
+res.status(400).json({
+  error: "Error message",
+  code: "ERROR_CODE",
+  details: {}
+});
+```
+
+### Authentication
+
+- **ALWAYS** verify JWT tokens for protected routes
+- **ALWAYS** use Bearer token format: `Authorization: Bearer <token>`
+- **NEVER** expose sensitive data in error messages
+
+---
+
+## 📱 WhatsApp Integration Rules
+
+### Message Handling
+
+#### ✅ REQUIRED: Normalize User Input
+
+```javascript
+// ✅ DO: Normalize input
+const msg = message.toLowerCase().trim();
+
+// ❌ DON'T: Use raw input
+if (message === "menu") { // Case-sensitive, may fail
+```
+
+#### ✅ REQUIRED: Update User Step
+
+**ALWAYS** update user's `current_step` when navigating:
+
+```javascript
+// ✅ DO: Update step
+await db.query(
+  `UPDATE users SET current_step = $1, updated_at = NOW() WHERE id = $2`,
+  ["checkout_address", userId]
+);
+```
+
+#### ✅ REQUIRED: Use Templates for Messages
+
+**ALWAYS** use template functions from `templates/whatsapp/`:
+
+```javascript
+// ✅ DO: Use templates
+const menu = templates.shopping.menu();
+await this.sendMessage(user.phone, menu);
+
+// ❌ DON'T: Hardcode messages
+await this.sendMessage(user.phone, "Welcome to Shopping!");
+```
+
+### Navigation Commands
+
+**ALWAYS** support these universal commands:
+- `"0"` or `"back"` - Go back one step
+- `"menu"` or `"MENU"` - Return to main menu
+- `"help"` or `"HELP"` - Show help
+- `"1"` to `"11"` - Select service from main menu
+
+---
+
+## 💳 Payment Rules
+
+### Stripe Integration
+
+#### ✅ REQUIRED: Validate Amount Before Creating Session
+
+```javascript
+// ✅ DO: Validate amount
+if (!amount || amount <= 0) {
+  throw new Error('Invalid payment amount. Amount must be greater than 0.');
+}
+```
+
+#### ✅ REQUIRED: Include Metadata in Checkout Sessions
+
+```javascript
+// ✅ DO: Include metadata
+const session = await stripe.checkout.sessions.create({
+  // ... other options
+  metadata: {
+    userId: userId.toString(),
+    serviceType: 'shopping',
+    orderNumber: orderNumber,
+    phoneNumber: user.phone
+  }
+});
+```
+
+#### ✅ REQUIRED: Verify Webhook Signatures
+
+```javascript
+// ✅ DO: Verify webhook signature
+const sig = req.headers['stripe-signature'];
+const event = stripe.webhooks.constructEvent(
+  req.body,
+  sig,
+  process.env.STRIPE_WEBHOOK_SECRET
+);
+```
+
+### Payment Flow
+
+**ALWAYS** follow this flow:
+1. Create checkout session
+2. Send payment link via WhatsApp
+3. Wait for webhook confirmation
+4. Update order status
+5. Send confirmation via WhatsApp
+6. Deliver service (credentials, access, etc.)
+
+---
+
+## 🤖 AI Agent Rules
+
+### Conversation Handling
+
+#### ✅ REQUIRED: Load Conversation History
+
+```javascript
+// ✅ DO: Load history for context
+const history = await db.query(
+  `SELECT * FROM conversation_history WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20`,
+  [userId]
+);
+```
+
+#### ✅ REQUIRED: Save Conversation History
+
+```javascript
+// ✅ DO: Save messages
+await db.query(
+  `INSERT INTO conversation_history (user_id, role, content) VALUES ($1, $2, $3)`,
+  [userId, 'user', userMessage]
+);
+await db.query(
+  `INSERT INTO conversation_history (user_id, role, content) VALUES ($1, $2, $3)`,
+  [userId, 'assistant', aiResponse]
+);
+```
+
+#### ✅ REQUIRED: Fallback to Menu
+
+**ALWAYS** fallback to main menu if AI fails:
+
+```javascript
+// ✅ DO: Fallback handling
+try {
+  const response = await aiAgent.processMessage(user, message);
+  return response;
+} catch (error) {
+  console.error("AI Agent error:", error);
+  return await this.showMainMenu(user);
+}
+```
+
+---
+
+## 🧪 Testing Rules
+
+### Test Structure
+
+- **ALWAYS** place tests in `tests/` directory
+- **ALWAYS** name test files: `test_[feature].js`
+- **ALWAYS** use descriptive test names
+- **ALWAYS** test error cases, not just success cases
+
+### Test Data
+
+- **ALWAYS** use test data files in `tests/` directory
+- **NEVER** use production data in tests
+- **ALWAYS** clean up test data after tests
+
+---
+
+## 🚀 Deployment Rules
+
+### Environment Variables
+
+#### ✅ REQUIRED: Never Commit .env Files
+
+- **NEVER** commit `.env` files to git
+- **ALWAYS** use `.env.example` as template
+- **ALWAYS** document required variables in README
+
+#### ✅ REQUIRED: Set All Required Variables
+
+**ALWAYS** set these in production:
+- `DATABASE_URL`
+- `GREEN_ID_INSTANCE`
+- `GREEN_API_TOKEN_INSTANCE`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `JWT_SECRET`
+- `NODE_ENV=production`
+
+### Database Migrations
+
+- **ALWAYS** run migrations before deploying
+- **ALWAYS** test migrations on staging first
+- **ALWAYS** backup database before migrations
+- **NEVER** modify existing migrations
+
+### Deployment Checklist
+
+**ALWAYS** verify before deploying:
+- [ ] All tests pass
+- [ ] Environment variables set
+- [ ] Database migrations applied
+- [ ] Webhooks configured
+- [ ] Health endpoint working
+- [ ] Logs monitored
+
+---
+
+## 📝 Documentation Rules
+
+### Code Comments
+
+#### ✅ REQUIRED: Document Complex Logic
+
+```javascript
+// ✅ DO: Document complex logic
+/**
+ * Creates a Stripe checkout session with escrow hold
+ * Escrow automatically releases after 7 days if not manually released
+ * @param {number} userId - User ID
+ * @param {string} serviceType - Type of service
+ * @param {number} amount - Payment amount in USD
+ * @returns {Promise<Object>} Checkout session
+ */
+async function createCheckoutWithEscrow(userId, serviceType, amount) {
+  // ...
+}
+```
+
+#### ✅ REQUIRED: File Headers
+
+**ALWAYS** include file header for services:
+
+```javascript
+/**
+ * Service Name
+ * Brief description of what this service does
+ */
+```
+
+### README Updates
+
+- **ALWAYS** update README.md when adding new features
+- **ALWAYS** document breaking changes
+- **ALWAYS** update Change Log section
+- **ALWAYS** update API documentation
+
+---
+
+## 🔒 Security Rules
+
+### Input Validation
+
+#### ✅ REQUIRED: Validate All User Input
+
+```javascript
+// ✅ DO: Validate input
+if (!phoneNumber || !phoneNumber.match(/^\+?[1-9]\d{1,14}$/)) {
+  throw new Error('Invalid phone number format');
+}
+```
+
+### Sensitive Data
+
+- **NEVER** log sensitive data (passwords, tokens, API keys)
+- **NEVER** expose sensitive data in error messages
+- **ALWAYS** use environment variables for secrets
+- **ALWAYS** hash passwords before storing
+
+### SQL Injection Prevention
+
+- **ALWAYS** use parameterized queries
+- **NEVER** use string concatenation for SQL
+- **ALWAYS** validate input before database operations
+
+---
+
+## 🎯 Service-Specific Rules
+
+### Shopping Service
+
+- **ALWAYS** validate product availability before adding to cart
+- **ALWAYS** calculate total from cart items
+- **ALWAYS** create order before payment
+- **ALWAYS** update inventory after order confirmation
+
+### IPTV Service
+
+- **ALWAYS** deliver credentials immediately after payment
+- **ALWAYS** include M3U URL in delivery message
+- **ALWAYS** provide setup instructions (3 methods)
+- **ALWAYS** use environment variables for IPTV credentials
+
+### Payment Service
+
+- **ALWAYS** verify payment amount matches order total
+- **ALWAYS** update order status after payment
+- **ALWAYS** send confirmation via WhatsApp
+- **ALWAYS** handle refunds with proper reason codes
+
+---
+
+## 📊 Error Handling Rules
+
+### Error Types
+
+**ALWAYS** use consistent error codes:
+- `INTERNAL_ERROR` - Server errors
+- `VALIDATION_ERROR` - Input validation errors
+- `NOT_FOUND` - Resource not found
+- `UNAUTHORIZED` - Authentication errors
+- `PAYMENT_ERROR` - Payment processing errors
+
+### Error Logging
+
+```javascript
+// ✅ DO: Log errors with context
+console.error("Payment error:", {
+  userId,
+  orderNumber,
+  amount,
+  error: error.message,
+  stack: error.stack
+});
+```
+
+---
+
+## 🔄 State Management Rules
+
+### User State
+
+- **ALWAYS** track user's current step in `users.current_step`
+- **ALWAYS** store service context in `users.context` (JSON)
+- **ALWAYS** update state when navigating
+- **ALWAYS** reset state when returning to main menu
+
+### Conversation State
+
+- **ALWAYS** maintain conversation history (last 20 messages)
+- **ALWAYS** use history for AI context
+- **ALWAYS** clean up old history (older than 30 days)
+
+---
+
+## 📦 Package Management Rules
+
+### Dependencies
+
+- **ALWAYS** use `npm` (not yarn, not bun for this project)
+- **ALWAYS** install from `backend/` directory
+- **ALWAYS** update `package.json` with exact versions
+- **ALWAYS** test after updating dependencies
+
+### Version Control
+
+- **ALWAYS** commit `package-lock.json`
+- **NEVER** commit `node_modules/`
+- **ALWAYS** document breaking changes in dependencies
+
+---
+
+## 🎨 Template Rules
+
+### Message Templates
+
+- **ALWAYS** create templates in `backend/src/templates/whatsapp/[service].js`
+- **ALWAYS** export functions, not strings
+- **ALWAYS** use emojis for visual clarity
+- **ALWAYS** format messages for WhatsApp (max 4096 chars)
+
+### Template Structure
+
+```javascript
+// ✅ DO: Template structure
+module.exports = {
+  menu: () => {
+    return `
+🛍️ SHOPPING STORE
+
+1. Phone Accessories
+2. Fashion & Clothing
+3. Electronics
+...
+    `.trim();
+  },
+  
+  productDetail: (product) => {
+    return `
+📦 ${product.name}
+💰 $${product.price}
+⭐ ${product.rating}/5
+...
+    `.trim();
+  }
+};
+```
+
+---
+
+## ✅ Code Review Checklist
+
+Before submitting code, verify:
+
+- [ ] All async/await used (no callbacks)
+- [ ] All SQL queries parameterized
+- [ ] All errors handled with try-catch
+- [ ] All user input validated
+- [ ] All sensitive data protected
+- [ ] All database operations use transactions where needed
+- [ ] All WhatsApp messages use templates
+- [ ] All user steps updated correctly
+- [ ] All payment flows verified
+- [ ] All tests pass
+- [ ] Documentation updated
+- [ ] README updated if needed
+
+---
+
+## 🚫 Common Mistakes to Avoid
+
+### ❌ DON'T:
+
+1. **Don't use callbacks** - Always use async/await
+2. **Don't concatenate SQL** - Always use parameterized queries
+3. **Don't hardcode messages** - Always use templates
+4. **Don't skip error handling** - Always wrap in try-catch
+5. **Don't commit .env files** - Always use .env.example
+6. **Don't modify existing migrations** - Always create new ones
+7. **Don't expose sensitive data** - Always use environment variables
+8. **Don't skip input validation** - Always validate user input
+9. **Don't forget to update user step** - Always track navigation
+10. **Don't skip tests** - Always test before deploying
+
+---
+
+## 📚 Examples
+
+### Complete Service Example
+
+See `backend/src/services/shopping/index.js` for a complete reference implementation.
+
+### Complete Route Example
+
+See `backend/src/routes/api/products.js` for a complete route implementation.
+
+### Complete Template Example
+
+See `backend/src/templates/whatsapp/shopping.js` for a complete template implementation.
+
+---
+
+## 🔗 Related Documentation
+
+- **README.md** - Master project documentation
+- **docs/ALL_SERVICES_WORKING.md** - Service implementation guide
+- **docs/STRIPE_INTEGRATION_COMPLETE.md** - Payment integration guide
+- **docs/AI_AGENT_SETUP.md** - AI Agent setup guide
+
+---
+
+**Last Updated**: December 19, 2024  
+**Version**: 1.0.0  
+**Status**: Active
