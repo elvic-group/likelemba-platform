@@ -62,8 +62,7 @@ class WhatsAppHandler {
           console.log(`👤 New user created: ${phone}`);
 
           // Send welcome message
-          const welcomeMsg = templates.main.welcomeMessage(user.display_name || senderName);
-          await this.sendMessage(phone, welcomeMsg);
+          await this.sendWelcomeMessage(phone, user.display_name || senderName);
           return;
         } catch (createError) {
           console.error('Error creating user:', createError);
@@ -98,6 +97,11 @@ class WhatsAppHandler {
           return await this.sendHelp(user.phone);
         }
         return await this.sendMainMenu(user.phone, user.role);
+      }
+
+      // OTP verification flow
+      if (user.current_step === 'awaiting_otp') {
+        return await this.handleOTPVerification(user, message);
       }
 
       // Admin commands
@@ -182,12 +186,18 @@ class WhatsAppHandler {
    */
   async handleNaturalLanguage(user, message) {
     try {
+      console.log(`🤖 AI Agent processing message from ${user.phone}: ${message.substring(0, 50)}...`);
       const response = await aiAgentService.processMessage(user, message);
       await this.sendMessage(user.phone, response);
     } catch (error) {
       console.error('AI Agent error:', error);
-      // Fallback to menu
-      await this.sendMainMenu(user.phone, user.role);
+      // Provide helpful error message instead of just showing menu
+      const errorMsg = error.message || 'AI service is temporarily unavailable';
+      await this.sendMessage(
+        user.phone,
+        `⚠️ ${errorMsg}\n\nPlease use the menu options (type MENU) or try again later.`
+      );
+      // Don't fallback to menu automatically - let user decide
     }
   }
 
@@ -283,6 +293,45 @@ class WhatsAppHandler {
   }
 
   /**
+   * Handle OTP verification
+   */
+  async handleOTPVerification(user, message) {
+    const otpService = require('../users/otp');
+    const { query } = require('../../config/database');
+
+    const otp = message.trim();
+    const result = await otpService.verifyOTP(user.phone_e164, otp);
+
+    if (result.success) {
+      // Clear OTP step
+      await query('UPDATE users SET current_step = NULL, updated_at = NOW() WHERE id = $1', [user.id]);
+      
+      await this.sendMessage(
+        user.phone_e164,
+        '✅ Verification successful! Welcome to Likelemba.'
+      );
+      await this.sendMainMenu(user.phone_e164, user.role);
+    } else {
+      await this.sendMessage(
+        user.phone_e164,
+        `❌ ${result.message || 'Invalid OTP'}. Please try again or type RESEND to get a new code.`
+      );
+    }
+  }
+
+  /**
+   * Send welcome message
+   */
+  async sendWelcomeMessage(phone, name) {
+    try {
+      const welcomeText = templates.main.welcomeMessage(name);
+      await this.sendMessage(phone, welcomeText);
+    } catch (error) {
+      console.error('Error sending welcome message:', error);
+    }
+  }
+
+  /**
    * Send WhatsApp message
    */
   async sendMessage(phone, text) {
@@ -299,19 +348,19 @@ class WhatsAppHandler {
 
       // Send typing indicator
       try {
-        await greenAPI.service.sendTyping({
-          chatId: formattedPhone,
-          typingTime: typingTime,
-        });
-        await this.sleep(typingTime);
+        if (greenAPI.service && greenAPI.service.sendTyping) {
+          await greenAPI.service.sendTyping({
+            chatId: formattedPhone,
+            typingTime: typingTime,
+          });
+          await this.sleep(typingTime);
+        }
       } catch (typingError) {
         console.warn('Error sending typing indicator:', typingError);
       }
 
       // Send message
-      await greenAPI.message.sendMessage(formattedPhone, null, text, {
-        typingTime: typingTime,
-      });
+      await greenAPI.message.sendMessage(formattedPhone, null, text);
 
       console.log(`✅ Message sent to ${phone}`);
     } catch (error) {
