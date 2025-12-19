@@ -63,10 +63,15 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start notification scheduler
+// Start notification scheduler (only if enabled)
+// Set ENABLE_NOTIFICATIONS=true to enable automatic notifications
+// By default, only responds to incoming messages
 const notificationScheduler = require('./services/notifications/scheduler');
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && process.env.ENABLE_NOTIFICATIONS === 'true') {
+  console.log('📅 Notification scheduler enabled');
   notificationScheduler.start();
+} else {
+  console.log('📅 Notification scheduler disabled (only responding to incoming messages)');
 }
 
 // Start server

@@ -183,9 +183,21 @@ class NotificationScheduler {
 
   /**
    * Send due reminder
+   * Only sends to users who have contacted us first
    */
   async sendDueReminder(contribution) {
     try {
+      // Only send to users who have contacted us first
+      const userCheck = await query(
+        `SELECT has_contacted_us FROM users WHERE phone_e164 = $1`,
+        [contribution.phone_e164]
+      );
+      
+      if (userCheck.rows.length === 0 || !userCheck.rows[0].has_contacted_us) {
+        console.log(`⏭️ Skipping reminder to ${contribution.phone_e164} - user has not contacted us`);
+        return;
+      }
+
       const reminder = templates.contributions.dueReminder(
         contribution,
         contribution.group_name,
@@ -207,9 +219,21 @@ class NotificationScheduler {
 
   /**
    * Send overdue reminder
+   * Only sends to users who have contacted us first
    */
   async sendOverdueReminder(contribution) {
     try {
+      // Only send to users who have contacted us first
+      const userCheck = await query(
+        `SELECT has_contacted_us FROM users WHERE phone_e164 = $1`,
+        [contribution.phone_e164]
+      );
+      
+      if (userCheck.rows.length === 0 || !userCheck.rows[0].has_contacted_us) {
+        console.log(`⏭️ Skipping overdue reminder to ${contribution.phone_e164} - user has not contacted us`);
+        return;
+      }
+
       const reminder = templates.contributions.latePaymentNudge(
         contribution.group_name,
         contribution.display_name || 'Member',
@@ -245,8 +269,19 @@ class NotificationScheduler {
       const groupsService = require('../groups');
       const members = await groupsService.getGroupMembers(cycle.group_id);
 
-      // Notify all members
+      // Notify all members (only those who have contacted us)
       for (const member of members) {
+        // Only send to users who have contacted us first
+        const userCheck = await query(
+          `SELECT has_contacted_us FROM users WHERE phone_e164 = $1`,
+          [member.phone_e164]
+        );
+        
+        if (userCheck.rows.length === 0 || !userCheck.rows[0].has_contacted_us) {
+          console.log(`⏭️ Skipping quorum notification to ${member.phone_e164} - user has not contacted us`);
+          continue;
+        }
+
         const notification = templates.payouts.quorumMet(
           cycle.group_name,
           cycleData.payout_date,

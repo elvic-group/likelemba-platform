@@ -37,6 +37,10 @@ class WhatsAppHandler {
       const phone = senderData.sender.replace('@c.us', '');
       const senderName = senderData.senderName || 'User';
 
+      // CRITICAL: Only respond to users who have contacted us first
+      // This prevents sending messages to contacts who haven't initiated contact
+      console.log(`📨 Incoming message from ${phone} (${senderName})`);
+
       // Extract message text - try multiple formats
       let message = '';
       
@@ -88,10 +92,21 @@ class WhatsAppHandler {
 
       if (!user) {
         try {
+          // Create user and mark as having contacted us
           user = await usersService.createUser(phone, senderName);
           console.log(`👤 New user created: ${phone}`);
+          
+          // Mark that this user has contacted us (important for notification filtering)
+          try {
+            await query(
+              `UPDATE users SET has_contacted_us = TRUE, first_contact_at = NOW() WHERE id = $1`,
+              [user.id]
+            );
+          } catch (updateError) {
+            console.warn('⚠️ Could not update contact flag:', updateError.message);
+          }
 
-          // Send welcome message
+          // Send welcome message (only because they contacted us first)
           await this.sendWelcomeMessage(phone, user.display_name || senderName);
           return;
         } catch (createError) {
@@ -107,11 +122,18 @@ class WhatsAppHandler {
           return;
         }
       } else {
-        // Update last seen
+        // Update last seen and mark as having contacted us
         try {
-          await query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [user.id]);
+          await query(
+            `UPDATE users 
+             SET last_seen_at = NOW(), 
+                 has_contacted_us = TRUE,
+                 first_contact_at = COALESCE(first_contact_at, NOW())
+             WHERE id = $1`,
+            [user.id]
+          );
         } catch (updateError) {
-          console.warn('⚠️ Could not update last_seen_at:', updateError.message);
+          console.warn('⚠️ Could not update user status:', updateError.message);
           // Continue anyway - not critical
         }
       }
@@ -253,6 +275,7 @@ class WhatsAppHandler {
 
   /**
    * Handle natural language with AI agent
+   * Only responds to users who have contacted us first
    */
   async handleNaturalLanguage(user, message, userPhone = null) {
     try {
@@ -261,6 +284,29 @@ class WhatsAppHandler {
         console.error('❌ No phone number available for AI agent');
         return;
       }
+
+      // Verify user has contacted us first
+      try {
+        const userCheck = await query(
+          `SELECT has_contacted_us FROM users WHERE id = $1`,
+          [user.id]
+        );
+        
+        if (userCheck.rows.length > 0 && !userCheck.rows[0].has_contacted_us) {
+          console.log(`⏭️ Skipping AI response to ${phone} - user has not contacted us first`);
+          // Still send a polite message explaining they need to initiate
+          await this.sendMessage(
+            phone,
+            '👋 Hi! I can only respond to messages you send me. Please send me a message first, and I\'ll be happy to help!',
+            true // Allow this one message
+          );
+          return;
+        }
+      } catch (checkError) {
+        console.warn('⚠️ Could not verify contact status for AI:', checkError.message);
+        // Continue if check fails (don't block)
+      }
+
       console.log(`🤖 AI Agent processing message from ${phone}: ${message.substring(0, 50)}...`);
       const response = await aiAgentService.processMessage(user, message);
       await this.sendMessage(phone, response);
@@ -418,12 +464,32 @@ class WhatsAppHandler {
 
   /**
    * Send WhatsApp message
+   * IMPORTANT: Only sends to users who have contacted us first
    */
-  async sendMessage(phone, text) {
+  async sendMessage(phone, text, allowUncontacted = false) {
     try {
       if (!phone || !text) {
         console.error('Invalid phone or message');
         return;
+      }
+
+      // CRITICAL: Only send to users who have contacted us first (unless explicitly allowed)
+      // This prevents sending messages to contacts who haven't initiated contact
+      if (!allowUncontacted) {
+        try {
+          const userCheck = await query(
+            `SELECT has_contacted_us FROM users WHERE phone_e164 = $1 OR phone = $1`,
+            [phone]
+          );
+          
+          if (userCheck.rows.length > 0 && !userCheck.rows[0].has_contacted_us) {
+            console.log(`⏭️ Skipping message to ${phone} - user has not contacted us first`);
+            return;
+          }
+        } catch (checkError) {
+          // If check fails, log but continue (don't block critical messages)
+          console.warn('⚠️ Could not verify contact status:', checkError.message);
+        }
       }
 
       const formattedPhone = phone.includes('@c.us') ? phone : `${phone}@c.us`;
