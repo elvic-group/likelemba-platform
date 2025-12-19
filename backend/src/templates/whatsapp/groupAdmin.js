@@ -3,7 +3,7 @@
  */
 module.exports = {
   menu: () => {
-    return `👑 **Group Admin Menu**
+    return `👑 Group Admin Menu
 
 1) Create Group
 2) Manage Members

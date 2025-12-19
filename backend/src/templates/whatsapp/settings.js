@@ -3,7 +3,7 @@
  */
 module.exports = {
   menu: (user) => {
-    return `⚙️ **Settings**
+    return `⚙️ Settings
 
 1) Change Language
 2) Set PIN

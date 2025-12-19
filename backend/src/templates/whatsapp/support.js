@@ -3,7 +3,7 @@
  */
 module.exports = {
   menu: () => {
-    return `🧑‍💼 **Support**
+    return `🧑‍💼 Support
 
 How can we help you today?
 
@@ -20,7 +20,7 @@ Reply with a number, or describe your issue.`.trim();
     return `🧑‍💼 A support agent will assist you shortly.
 
 In the meantime, reply with:
-• **PAYMENT REF** (if you have it)
+• PAYMENT REF (if you have it)
 • A short description of the issue`.trim();
   },
 };

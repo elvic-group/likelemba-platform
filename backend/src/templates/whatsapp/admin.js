@@ -3,7 +3,7 @@
  */
 module.exports = {
   menu: () => {
-    return `🔐 **Platform Admin Menu**
+    return `🔐 Platform Admin Menu
 
 1) Search User
 2) Search Group
