@@ -6,6 +6,8 @@ const cron = require('node-cron');
 const { query } = require('../../config/database');
 const whatsappHandler = require('../whatsapp/handler');
 const templates = require('../../templates/whatsapp');
+const templateTranslator = require('../whatsapp/templateTranslator');
+const usersService = require('../users');
 const cyclesService = require('../cycles');
 
 class NotificationScheduler {
@@ -198,7 +200,10 @@ class NotificationScheduler {
         return;
       }
 
-      const reminder = templates.contributions.dueReminder(
+      // Get user to get locale for translation
+      const user = await usersService.getUserByPhone(contribution.phone_e164);
+      const reminder = await templateTranslator.dueReminder(
+        user,
         contribution,
         contribution.group_name,
         contribution.display_name || 'Member'
@@ -234,7 +239,10 @@ class NotificationScheduler {
         return;
       }
 
-      const reminder = templates.contributions.latePaymentNudge(
+      // Get user to get locale for translation
+      const user = await usersService.getUserByPhone(contribution.phone_e164);
+      const reminder = await templateTranslator.latePaymentNudge(
+        user,
         contribution.group_name,
         contribution.display_name || 'Member',
         contribution.days_late,
@@ -282,7 +290,10 @@ class NotificationScheduler {
           continue;
         }
 
-        const notification = templates.payouts.quorumMet(
+        // Get user to get locale for translation
+        const user = await usersService.getUserByPhone(member.phone_e164);
+        const notification = await templateTranslator.quorumMet(
+          user,
           cycle.group_name,
           cycleData.payout_date,
           recipient?.name || 'Recipient'
