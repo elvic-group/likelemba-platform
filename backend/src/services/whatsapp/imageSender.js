@@ -4,7 +4,6 @@
  */
 const greenAPI = require('../../config/greenapi');
 const path = require('path');
-const FormData = require('form-data');
 const fs = require('fs');
 
 class ImageSender {
@@ -31,29 +30,18 @@ class ImageSender {
         return null;
       }
 
-      // Create FormData with file
-      // Ensure PNG with transparency is preserved
-      const formData = new FormData();
-      formData.append('chatId', chatId);
-      
-      // Read file to ensure it's properly handled
-      const fileStream = fs.createReadStream(absolutePath);
-      const stats = fs.statSync(absolutePath);
-      
-      formData.append('file', fileStream, {
-        filename: path.basename(imagePath),
-        contentType: 'image/png',
-        knownLength: stats.size,
-      });
-      
-      if (caption) {
-        formData.append('caption', caption);
-      }
+      // Get file name from path
+      const fileName = path.basename(absolutePath);
 
-      // Send file using Green API
-      const response = await greenAPI.file.sendFileByUpload(formData);
+      // Send file using Green API (direct path, not FormData)
+      const response = await greenAPI.file.sendFileByUpload(
+        chatId,
+        absolutePath,
+        fileName,
+        caption
+      );
 
-      console.log(`✅ Image sent to ${phone}: ${path.basename(imagePath)}`);
+      console.log(`✅ Image sent to ${phone}: ${fileName}`);
       return response;
     } catch (error) {
       console.error(`❌ Error sending image to ${phone}:`, error);
