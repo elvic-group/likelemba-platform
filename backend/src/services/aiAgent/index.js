@@ -248,9 +248,15 @@ class AIAgentService {
 
   /**
    * Process user message with AI agent (with function calling)
+   * @param {Object} user - User object
+   * @param {string} message - User message
+   * @param {string} detectedLanguage - Detected language code (optional)
    */
-  async processMessage(user, message) {
+  async processMessage(user, message, detectedLanguage = null) {
     try {
+      // Use detected language or user's locale
+      const responseLanguage = detectedLanguage || user.locale || 'en';
+      
       // Load conversation history
       const history = await this.getConversationHistory(user.id, 20);
 
@@ -258,7 +264,7 @@ class AIAgentService {
       const messages = [
         {
           role: 'system',
-          content: this.getSystemPrompt(user),
+          content: this.getSystemPrompt(user, responseLanguage),
         },
         ...history.map((h) => {
           const msg = {
@@ -670,14 +676,53 @@ class AIAgentService {
   }
 
   /**
-   * Get system prompt for AI agent
+   * Get language name from locale code
    */
-  getSystemPrompt(user) {
+  getLanguageName(locale) {
+    const names = {
+      'en': 'English',
+      'fr': 'Français',
+      'sw': 'Kiswahili',
+      'es': 'Español',
+      'pt': 'Português',
+      'ar': 'Arabic',
+      'hi': 'Hindi',
+      'zh': 'Chinese',
+      'de': 'German',
+      'it': 'Italian',
+      'ru': 'Russian',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'nl': 'Dutch',
+      'pl': 'Polish',
+      'tr': 'Turkish',
+      'vi': 'Vietnamese',
+    };
+    return names[locale] || 'English';
+  }
+
+  /**
+   * Get system prompt for AI agent
+   * @param {Object} user - User object
+   * @param {string} detectedLanguage - Detected language code (optional)
+   */
+  getSystemPrompt(user, detectedLanguage = null) {
+    const language = detectedLanguage || user.locale || 'en';
+    const languageName = this.getLanguageName(language);
+    
+    const languageInstruction = language === 'en'
+      ? 'IMPORTANT: Respond in English.'
+      : `IMPORTANT: Respond in ${languageName}. All your responses must be in ${languageName}. Always match the language the user is speaking.`;
+
     return `You are Likelemba Assistant, a helpful WhatsApp bot for rotating savings groups (ROSCA).
+
+${languageInstruction}
 
 Your job: help users create and manage savings groups, pay contributions, track payouts, and contact support.
 
 CRITICAL RULES:
+- Always respond in the same language the user is speaking
+- If user switches languages, switch with them
 - Never claim funds are received unless verified by payment webhooks.
 - For any payout order change, refund, or member removal: ask for confirmation + require PIN.
 - Use tools only when the user has permission for the requested action.
@@ -691,6 +736,8 @@ CRITICAL RULES:
 
 User role: ${user.role}
 User phone: ${user.phone_e164}
+User language preference: ${user.locale || 'en'}
+Detected language: ${language}
 
 Available menu commands:
 - Type numbers (1-6) for main menu options

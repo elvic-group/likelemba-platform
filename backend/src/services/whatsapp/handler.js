@@ -10,6 +10,8 @@ const paymentsService = require('../payments');
 const cyclesService = require('../cycles');
 const aiAgentService = require('../aiAgent');
 const templates = require('../../templates/whatsapp');
+const translationService = require('../translation');
+const templateTranslator = require('./templateTranslator');
 
 class WhatsAppHandler {
   constructor() {
@@ -126,9 +128,10 @@ class WhatsAppHandler {
           console.log(`👤 New user created: ${phone}`);
           
           // Mark that this user has contacted us (important for notification filtering)
+          // Set step to language selection
           try {
             await query(
-              `UPDATE users SET has_contacted_us = TRUE, first_contact_at = NOW() WHERE id = $1`,
+              `UPDATE users SET has_contacted_us = TRUE, first_contact_at = NOW(), current_step = 'selecting_language' WHERE id = $1`,
               [user.id]
             );
           } catch (updateError) {
@@ -207,12 +210,32 @@ class WhatsAppHandler {
         return;
       }
 
+      // Detect language for non-command messages (for translation)
+      let detectedLanguage = null;
+      if (!['hi', 'hello', 'hey', 'menu', 'start', 'help'].includes(msg) && 
+          !msg.match(/^[0-9]{1,2}$/)) {
+        detectedLanguage = await translationService.detectLanguage(message);
+        console.log(`🌍 Detected language: ${detectedLanguage} for message: ${message.substring(0, 50)}`);
+        
+        // Update user locale if consistently using different language
+        if (detectedLanguage !== user.locale && detectedLanguage !== 'en') {
+          await this.updateLocaleIfConsistent(user, detectedLanguage);
+        }
+      }
+
       // Universal commands (highest priority)
       if (['hi', 'hello', 'hey', 'menu', 'start', 'help'].includes(msg)) {
         if (msg === 'help') {
-          return await this.sendHelp(userPhone);
+          return await this.sendHelp(userPhone, detectedLanguage);
         }
-        return await this.sendMainMenu(userPhone, user.role);
+        return await this.sendMainMenu(userPhone, user.role, detectedLanguage);
+      }
+
+      // Language selection (for new users or when locale is not set)
+      if (user.current_step === 'selecting_language' || (!user.locale || user.locale === 'en')) {
+        if (msg === '1' || msg === '2' || msg === '3') {
+          return await this.handleLanguageSelection(user, msg, userPhone);
+        }
       }
 
       // OTP verification flow
@@ -222,12 +245,12 @@ class WhatsAppHandler {
 
       // Admin commands
       if (user.role === 'platform_admin' && msg === 'admin menu') {
-        return await this.sendAdminMenu(userPhone);
+        return await this.sendAdminMenu(userPhone, detectedLanguage);
       }
 
       // Group admin commands
       if (user.role === 'group_admin' && msg.startsWith('admin')) {
-        return await this.sendGroupAdminMenu(userPhone);
+        return await this.sendGroupAdminMenu(userPhone, detectedLanguage);
       }
 
       // Service flow commands (if in service)
@@ -238,11 +261,11 @@ class WhatsAppHandler {
       // Main menu selection (numbers)
       if (msg.match(/^[0-9]{1,2}$/)) {
         const option = parseInt(msg);
-        return await this.handleMainMenuSelection(user, option, userPhone);
+        return await this.handleMainMenuSelection(user, option, userPhone, detectedLanguage);
       }
 
       // Natural language (AI agent)
-      return await this.handleNaturalLanguage(user, message, userPhone);
+      return await this.handleNaturalLanguage(user, message, userPhone, detectedLanguage);
     } catch (error) {
       console.error('Error routing message:', error);
       const userPhone = phoneFromWebhook || user.phone_e164 || user.phone;
@@ -256,40 +279,114 @@ class WhatsAppHandler {
   }
 
   /**
+   * Handle language selection
+   */
+  async handleLanguageSelection(user, message, userPhone = null) {
+    const phone = userPhone || user.phone_e164 || user.phone;
+    const msg = message.trim();
+    const locale = translationService.getLanguageCode(msg);
+    const languageName = translationService.getLanguageName(locale);
+    
+    try {
+      // Update user locale
+      await query(
+        `UPDATE users SET locale = $1, current_step = NULL, updated_at = NOW() WHERE id = $2`,
+        [locale, user.id]
+      );
+      
+      // Refresh user object
+      user = await usersService.getUserById(user.id);
+      
+      // Send confirmation in selected language
+      const confirmationMsg = locale === 'en' 
+        ? `✅ Language set to English!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 Type MENU to see the main menu`
+        : await translationService.translate(
+            `✅ Language set to ${languageName}!\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💡 Type MENU to see the main menu`,
+            locale
+          );
+      
+      await this.sendMessage(phone, confirmationMsg);
+      
+      // Send main menu in selected language
+      await this.sendMainMenu(phone, user.role, locale);
+    } catch (error) {
+      console.error('Error setting language:', error);
+      await this.sendMessage(phone, 'Sorry, there was an error setting your language. Please try again.');
+    }
+  }
+
+  /**
+   * Update locale if user consistently uses a different language
+   */
+  async updateLocaleIfConsistent(user, detectedLanguage) {
+    try {
+      // Check last 3 messages to see if user is consistently using this language
+      const recentMessages = await query(
+        `SELECT content FROM likelemba.conversation_history 
+         WHERE user_id = $1 AND role = 'user' 
+         ORDER BY created_at DESC LIMIT 3`,
+        [user.id]
+      );
+
+      if (recentMessages.rows.length >= 2) {
+        // If 2+ recent messages detected in same language, update locale
+        const languages = await Promise.all(
+          recentMessages.rows.map(r => translationService.detectLanguage(r.content))
+        );
+        
+        const sameLanguageCount = languages.filter(l => l === detectedLanguage).length;
+        
+        if (sameLanguageCount >= 2) {
+          await query(
+            `UPDATE users SET locale = $1, updated_at = NOW() WHERE id = $2`,
+            [detectedLanguage, user.id]
+          );
+          console.log(`✅ Updated user locale to ${detectedLanguage} (consistent usage)`);
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not check language consistency:', error.message);
+    }
+  }
+
+  /**
    * Handle main menu selection
    */
-  async handleMainMenuSelection(user, option, userPhone = null) {
+  async handleMainMenuSelection(user, option, userPhone = null, detectedLanguage = null) {
     const phone = userPhone || user.phone_e164 || user.phone;
     
     switch (option) {
       case 1:
         // My Groups
         const groups = await groupsService.getUserGroups(user.id);
-        const groupsMsg = templates.groups.listGroups(groups);
+        const groupsMsg = await templateTranslator.listGroups(user, groups, detectedLanguage);
         await this.sendMessage(phone, groupsMsg);
         break;
       case 2:
         // Pay Contribution
-        await this.handlePayContribution(user, phone);
+        await this.handlePayContribution(user, phone, detectedLanguage);
         break;
       case 3:
         // Next Payout
-        await this.handleNextPayout(user, phone);
+        await this.handleNextPayout(user, phone, detectedLanguage);
         break;
       case 4:
         // My Receipts
-        await this.handleMyReceipts(user, phone);
+        await this.handleMyReceipts(user, phone, detectedLanguage);
         break;
       case 5:
         // Support
-        await this.handleSupport(user, phone);
+        await this.handleSupport(user, phone, detectedLanguage);
         break;
       case 6:
         // Settings
-        await this.handleSettings(user, phone);
+        await this.handleSettings(user, phone, detectedLanguage);
         break;
       default:
-        await this.sendMessage(phone, 'Invalid option. Please choose 1-6.');
+        const errorMsg = detectedLanguage && detectedLanguage !== 'en'
+          ? await translationService.translate('Invalid option. Please choose 1-6.', detectedLanguage)
+          : 'Invalid option. Please choose 1-6.';
+        await this.sendMessage(phone, errorMsg);
     }
   }
 
@@ -298,15 +395,17 @@ class WhatsAppHandler {
    */
   async handleServiceFlow(user, message, userPhone = null) {
     // This will be implemented based on current service
-    // For now, fallback to AI agent
-    return await this.handleNaturalLanguage(user, message, userPhone);
+    // For now, fallback to AI agent with language detection
+    const detectedLanguage = await translationService.detectLanguage(message);
+    return await this.handleNaturalLanguage(user, message, userPhone, detectedLanguage);
   }
 
   /**
    * Handle natural language with AI agent
    * Only responds to users who have contacted us first
+   * Auto-detects language and responds accordingly
    */
-  async handleNaturalLanguage(user, message, userPhone = null) {
+  async handleNaturalLanguage(user, message, userPhone = null, detectedLanguage = null) {
     try {
       const phone = userPhone || user.phone_e164 || user.phone;
       if (!phone) {
@@ -336,8 +435,29 @@ class WhatsAppHandler {
         // Continue if check fails (don't block)
       }
 
-      console.log(`🤖 AI Agent processing message from ${phone}: ${message.substring(0, 50)}...`);
-      const response = await aiAgentService.processMessage(user, message);
+      // Auto-detect language if not provided
+      if (!detectedLanguage) {
+        detectedLanguage = await translationService.detectLanguage(message);
+        console.log(`🌍 Auto-detected language: ${detectedLanguage} for message: ${message.substring(0, 50)}`);
+      }
+
+      // Update user locale if different (learn from usage)
+      if (detectedLanguage !== user.locale && detectedLanguage !== 'en') {
+        try {
+          await query(
+            `UPDATE users SET locale = $1, updated_at = NOW() WHERE id = $2`,
+            [detectedLanguage, user.id]
+          );
+          // Refresh user object
+          user = await usersService.getUserById(user.id);
+          console.log(`✅ Updated user locale to ${detectedLanguage} based on message`);
+        } catch (updateError) {
+          console.warn('⚠️ Could not update locale:', updateError.message);
+        }
+      }
+
+      console.log(`🤖 AI Agent processing message from ${phone} in ${detectedLanguage}: ${message.substring(0, 50)}...`);
+      const response = await aiAgentService.processMessage(user, message, detectedLanguage);
       await this.sendMessage(phone, response);
     } catch (error) {
       console.error('AI Agent error:', error);
@@ -359,96 +479,109 @@ class WhatsAppHandler {
   /**
    * Send main menu
    */
-  async sendMainMenu(phone, role = 'member') {
-    const menu = templates.main.menu(role);
+  async sendMainMenu(phone, role = 'member', detectedLanguage = null) {
+    const user = await usersService.getUserByPhone(phone);
+    const menu = await templateTranslator.menu(user, role, detectedLanguage);
     await this.sendMessage(phone, menu);
   }
 
   /**
    * Send help
    */
-  async sendHelp(phone) {
-    const helpMsg = templates.main.help();
+  async sendHelp(phone, detectedLanguage = null) {
+    const user = await usersService.getUserByPhone(phone);
+    const helpMsg = await templateTranslator.help(user, detectedLanguage);
     await this.sendMessage(phone, helpMsg);
   }
 
   /**
    * Send admin menu
    */
-  async sendAdminMenu(phone) {
-    const menu = templates.admin.menu();
+  async sendAdminMenu(phone, detectedLanguage = null) {
+    const user = await usersService.getUserByPhone(phone);
+    const menu = await templateTranslator.adminMenu(user, detectedLanguage);
     await this.sendMessage(phone, menu);
   }
 
   /**
    * Send group admin menu
    */
-  async sendGroupAdminMenu(phone) {
-    const menu = templates.groupAdmin.menu();
+  async sendGroupAdminMenu(phone, detectedLanguage = null) {
+    const user = await usersService.getUserByPhone(phone);
+    const menu = await templateTranslator.groupAdminMenu(user, detectedLanguage);
     await this.sendMessage(phone, menu);
   }
 
   /**
    * Handle pay contribution flow
    */
-  async handlePayContribution(user, userPhone = null) {
+  async handlePayContribution(user, userPhone = null, detectedLanguage = null) {
     const phone = userPhone || user.phone_e164 || user.phone;
     // Get user's pending contributions
     const contributions = await cyclesService.getPendingContributions(user.id);
     if (contributions.length === 0) {
-      await this.sendMessage(phone, 'You have no pending contributions.');
+      const emptyMsg = detectedLanguage && detectedLanguage !== 'en'
+        ? await translationService.translate('You have no pending contributions.', detectedLanguage)
+        : 'You have no pending contributions.';
+      await this.sendMessage(phone, emptyMsg);
       return;
     }
 
-    const contributionsMsg = templates.contributions.listPending(contributions);
+    const contributionsMsg = await templateTranslator.listPending(user, contributions, detectedLanguage);
     await this.sendMessage(phone, contributionsMsg);
   }
 
   /**
    * Handle next payout
    */
-  async handleNextPayout(user, userPhone = null) {
+  async handleNextPayout(user, userPhone = null, detectedLanguage = null) {
     const phone = userPhone || user.phone_e164 || user.phone;
     const nextPayout = await cyclesService.getNextPayout(user.id);
     if (!nextPayout) {
-      await this.sendMessage(phone, 'You have no scheduled payouts.');
+      const emptyMsg = detectedLanguage && detectedLanguage !== 'en'
+        ? await translationService.translate('You have no scheduled payouts.', detectedLanguage)
+        : 'You have no scheduled payouts.';
+      await this.sendMessage(phone, emptyMsg);
       return;
     }
 
-    const payoutMsg = templates.payouts.nextPayout(nextPayout);
+    const payoutMsg = await templateTranslator.nextPayout(user, nextPayout, detectedLanguage);
     await this.sendMessage(phone, payoutMsg);
   }
 
   /**
    * Handle my receipts
    */
-  async handleMyReceipts(user, userPhone = null) {
+  async handleMyReceipts(user, userPhone = null, detectedLanguage = null) {
     const phone = userPhone || user.phone_e164 || user.phone;
     const receipts = await paymentsService.getUserReceipts(user.id);
     if (receipts.length === 0) {
-      await this.sendMessage(phone, 'You have no receipts yet.');
+      const emptyMsg = detectedLanguage && detectedLanguage !== 'en'
+        ? await translationService.translate('You have no receipts yet.', detectedLanguage)
+        : 'You have no receipts yet.';
+      await this.sendMessage(phone, emptyMsg);
       return;
     }
 
-    const receiptsMsg = templates.receipts.listReceipts(receipts);
+    const receiptsMsg = await templateTranslator.listReceipts(user, receipts, detectedLanguage);
     await this.sendMessage(phone, receiptsMsg);
   }
 
   /**
    * Handle support
    */
-  async handleSupport(user, userPhone = null) {
+  async handleSupport(user, userPhone = null, detectedLanguage = null) {
     const phone = userPhone || user.phone_e164 || user.phone;
-    const supportMsg = templates.support.menu();
+    const supportMsg = await templateTranslator.supportMenu(user, detectedLanguage);
     await this.sendMessage(phone, supportMsg);
   }
 
   /**
    * Handle settings
    */
-  async handleSettings(user, userPhone = null) {
+  async handleSettings(user, userPhone = null, detectedLanguage = null) {
     const phone = userPhone || user.phone_e164 || user.phone;
-    const settingsMsg = templates.settings.menu(user);
+    const settingsMsg = await templateTranslator.settingsMenu(user, detectedLanguage);
     await this.sendMessage(phone, settingsMsg);
   }
 
@@ -466,16 +599,26 @@ class WhatsAppHandler {
       // Clear OTP step
       await query('UPDATE users SET current_step = NULL, updated_at = NOW() WHERE id = $1', [user.id]);
       
-      await this.sendMessage(
-        user.phone_e164,
-        '✅ Verification successful! Welcome to Likelemba.'
-      );
-      await this.sendMainMenu(user.phone_e164, user.role);
+      // Refresh user to get updated locale
+      user = await usersService.getUserById(user.id);
+      const detectedLanguage = user.locale || 'en';
+      
+      const successMsg = detectedLanguage !== 'en'
+        ? await translationService.translate('✅ Verification successful! Welcome to Likelemba.', detectedLanguage)
+        : '✅ Verification successful! Welcome to Likelemba.';
+      
+      await this.sendMessage(user.phone_e164, successMsg);
+      await this.sendMainMenu(user.phone_e164, user.role, detectedLanguage);
     } else {
-      await this.sendMessage(
-        user.phone_e164,
-        `❌ ${result.message || 'Invalid OTP'}. Please try again or type RESEND to get a new code.`
-      );
+      // Refresh user to get updated locale
+      user = await usersService.getUserById(user.id);
+      const detectedLanguage = user.locale || 'en';
+      
+      const errorMsg = detectedLanguage !== 'en'
+        ? await translationService.translate(`❌ ${result.message || 'Invalid OTP'}. Please try again or type RESEND to get a new code.`, detectedLanguage)
+        : `❌ ${result.message || 'Invalid OTP'}. Please try again or type RESEND to get a new code.`;
+      
+      await this.sendMessage(user.phone_e164, errorMsg);
     }
   }
 
@@ -484,7 +627,8 @@ class WhatsAppHandler {
    */
   async sendWelcomeMessage(phone, name) {
     try {
-      const welcomeText = templates.main.welcomeMessage(name);
+      const user = await usersService.getUserByPhone(phone);
+      const welcomeText = await templateTranslator.welcomeMessage(user, name);
       await this.sendMessage(phone, welcomeText);
     } catch (error) {
       console.error('Error sending welcome message:', error);
