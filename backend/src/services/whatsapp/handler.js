@@ -143,12 +143,15 @@ class WhatsAppHandler {
     try {
       const msg = message.toLowerCase().trim();
 
+      // Get phone number from user (handle both phone and phone_e164)
+      const userPhone = user.phone_e164 || user.phone;
+
       // Universal commands (highest priority)
       if (['hi', 'hello', 'hey', 'menu', 'start', 'help'].includes(msg)) {
         if (msg === 'help') {
-          return await this.sendHelp(user.phone);
+          return await this.sendHelp(userPhone);
         }
-        return await this.sendMainMenu(user.phone, user.role);
+        return await this.sendMainMenu(userPhone, user.role);
       }
 
       // OTP verification flow
@@ -158,12 +161,12 @@ class WhatsAppHandler {
 
       // Admin commands
       if (user.role === 'platform_admin' && msg === 'admin menu') {
-        return await this.sendAdminMenu(user.phone);
+        return await this.sendAdminMenu(userPhone);
       }
 
       // Group admin commands
       if (user.role === 'group_admin' && msg.startsWith('admin')) {
-        return await this.sendGroupAdminMenu(user.phone);
+        return await this.sendGroupAdminMenu(userPhone);
       }
 
       // Service flow commands (if in service)
@@ -181,8 +184,9 @@ class WhatsAppHandler {
       return await this.handleNaturalLanguage(user, message);
     } catch (error) {
       console.error('Error routing message:', error);
+      const userPhone = user.phone_e164 || user.phone;
       await this.sendMessage(
-        user.phone,
+        userPhone,
         'Sorry, I encountered an error. Please try again or type MENU for options.'
       );
     }
@@ -192,12 +196,14 @@ class WhatsAppHandler {
    * Handle main menu selection
    */
   async handleMainMenuSelection(user, option) {
+    const userPhone = user.phone_e164 || user.phone;
+    
     switch (option) {
       case 1:
         // My Groups
         const groups = await groupsService.getUserGroups(user.id);
         const groupsMsg = templates.groups.listGroups(groups);
-        await this.sendMessage(user.phone, groupsMsg);
+        await this.sendMessage(userPhone, groupsMsg);
         break;
       case 2:
         // Pay Contribution
@@ -220,7 +226,7 @@ class WhatsAppHandler {
         await this.handleSettings(user);
         break;
       default:
-        await this.sendMessage(user.phone, 'Invalid option. Please choose 1-6.');
+        await this.sendMessage(userPhone, 'Invalid option. Please choose 1-6.');
     }
   }
 
@@ -238,15 +244,17 @@ class WhatsAppHandler {
    */
   async handleNaturalLanguage(user, message) {
     try {
-      console.log(`🤖 AI Agent processing message from ${user.phone}: ${message.substring(0, 50)}...`);
+      const userPhone = user.phone_e164 || user.phone;
+      console.log(`🤖 AI Agent processing message from ${userPhone}: ${message.substring(0, 50)}...`);
       const response = await aiAgentService.processMessage(user, message);
-      await this.sendMessage(user.phone, response);
+      await this.sendMessage(userPhone, response);
     } catch (error) {
       console.error('AI Agent error:', error);
       // Provide helpful error message instead of just showing menu
+      const userPhone = user.phone_e164 || user.phone;
       const errorMsg = error.message || 'AI service is temporarily unavailable';
       await this.sendMessage(
-        user.phone,
+        userPhone,
         `⚠️ ${errorMsg}\n\nPlease use the menu options (type MENU) or try again later.`
       );
       // Don't fallback to menu automatically - let user decide
@@ -289,59 +297,64 @@ class WhatsAppHandler {
    * Handle pay contribution flow
    */
   async handlePayContribution(user) {
+    const userPhone = user.phone_e164 || user.phone;
     // Get user's pending contributions
     const contributions = await cyclesService.getPendingContributions(user.id);
     if (contributions.length === 0) {
-      await this.sendMessage(user.phone, 'You have no pending contributions.');
+      await this.sendMessage(userPhone, 'You have no pending contributions.');
       return;
     }
 
     const contributionsMsg = templates.contributions.listPending(contributions);
-    await this.sendMessage(user.phone, contributionsMsg);
+    await this.sendMessage(userPhone, contributionsMsg);
   }
 
   /**
    * Handle next payout
    */
   async handleNextPayout(user) {
+    const userPhone = user.phone_e164 || user.phone;
     const nextPayout = await cyclesService.getNextPayout(user.id);
     if (!nextPayout) {
-      await this.sendMessage(user.phone, 'You have no scheduled payouts.');
+      await this.sendMessage(userPhone, 'You have no scheduled payouts.');
       return;
     }
 
     const payoutMsg = templates.payouts.nextPayout(nextPayout);
-    await this.sendMessage(user.phone, payoutMsg);
+    await this.sendMessage(userPhone, payoutMsg);
   }
 
   /**
    * Handle my receipts
    */
   async handleMyReceipts(user) {
+    const userPhone = user.phone_e164 || user.phone;
     const receipts = await paymentsService.getUserReceipts(user.id);
     if (receipts.length === 0) {
-      await this.sendMessage(user.phone, 'You have no receipts yet.');
+      await this.sendMessage(userPhone, 'You have no receipts yet.');
       return;
     }
 
     const receiptsMsg = templates.receipts.listReceipts(receipts);
-    await this.sendMessage(user.phone, receiptsMsg);
+    await this.sendMessage(userPhone, receiptsMsg);
   }
 
   /**
    * Handle support
    */
   async handleSupport(user) {
+    const userPhone = user.phone_e164 || user.phone;
     const supportMsg = templates.support.menu();
-    await this.sendMessage(user.phone, supportMsg);
+    await this.sendMessage(userPhone, supportMsg);
   }
 
   /**
    * Handle settings
    */
   async handleSettings(user) {
+    const userPhone = user.phone_e164 || user.phone;
     const settingsMsg = templates.settings.menu(user);
-    await this.sendMessage(user.phone, settingsMsg);
+    await this.sendMessage(userPhone, settingsMsg);
   }
 
   /**
