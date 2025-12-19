@@ -1,18 +1,23 @@
 /**
- * Group Admin Templates
+ * Group Admin Templates - Redesigned
  */
 module.exports = {
   menu: () => {
-    return `👑 Group Admin Menu
+    return `👑 Group Admin Dashboard
 
-1) Create Group
-2) Manage Members
-3) Edit Rules
-4) Cycle Status
-5) Approve Exceptions
-6) Reports
+━━━━━━━━━━━━━━━━━━━━
+Group Management:
+━━━━━━━━━━━━━━━━━━━━
 
-Reply with a number.`.trim();
+1️⃣ Create Group
+2️⃣ Manage Members
+3️⃣ Edit Rules
+4️⃣ Cycle Status
+5️⃣ Approve Exceptions
+6️⃣ View Reports
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply with a number (1-6)
+Or type your command directly`.trim();
   },
 };
-

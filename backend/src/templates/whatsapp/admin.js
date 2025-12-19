@@ -1,19 +1,24 @@
 /**
- * Platform Admin Templates
+ * Platform Admin Templates - Redesigned
  */
 module.exports = {
   menu: () => {
-    return `🔐 Platform Admin Menu
+    return `🔐 Platform Admin Dashboard
 
-1) Search User
-2) Search Group
-3) Disputes Queue
-4) Refund Requests
-5) Risk Flags
-6) Broadcast Message
-7) Config
+━━━━━━━━━━━━━━━━━━━━
+Admin Tools:
+━━━━━━━━━━━━━━━━━━━━
 
-Reply with a number.`.trim();
+1️⃣ Search User
+2️⃣ Search Group
+3️⃣ Disputes Queue
+4️⃣ Refund Requests
+5️⃣ Risk Flags
+6️⃣ Broadcast Message
+7️⃣ System Config
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply with a number (1-7)
+Or type your command directly`.trim();
   },
 };
-

@@ -1,90 +1,128 @@
 /**
- * Main Menu Templates
+ * Main Menu Templates - Enhanced
+ * Beautiful, engaging WhatsApp message templates for Likelemba
  */
 module.exports = {
   welcomeMessage: (name) => {
-    return `👋 Hi ${name}! Welcome to Likelemba — save money together with your community.
+    return `🎉 Welcome to Likelemba, ${name}!
 
-Choose language:
-1️⃣ English  2️⃣ Français  3️⃣ Kiswahili
+💰 Save money together with your community
 
-Reply with 1, 2, or 3.`.trim();
+━━━━━━━━━━━━━━━━━━━━
+Choose your language:
+━━━━━━━━━━━━━━━━━━━━
+
+1️⃣ English
+2️⃣ Français  
+3️⃣ Kiswahili
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply with 1, 2, or 3`.trim();
   },
 
   menu: (role = 'member') => {
     if (role === 'platform_admin') {
-      return `✅ Admin Menu
-1) My Groups
-2) Pay Contribution
-3) Next Payout
-4) Receipts
-5) Support
-6) Settings
-7) Admin Panel
+      return `👑 Admin Dashboard
 
-💬 Or just chat with me naturally!
+━━━━━━━━━━━━━━━━━━━━
+Quick Actions:
+━━━━━━━━━━━━━━━━━━━━
 
-Reply with a number or type your question.`.trim();
+1️⃣ My Groups
+2️⃣ Pay Contribution
+3️⃣ Next Payout
+4️⃣ My Receipts
+5️⃣ Support
+6️⃣ Settings
+7️⃣ Admin Panel
+
+━━━━━━━━━━━━━━━━━━━━
+💬 Or chat naturally with me!
+
+💡 Reply with a number (1-7) or type your question`.trim();
     }
 
     if (role === 'group_admin') {
-      return `✅ Menu
-1) My Groups
-2) Pay Contribution
-3) Next Payout
-4) Receipts
-5) Support
-6) Settings
+      return `👑 Group Admin Menu
 
-💬 Or just chat with me naturally!
+━━━━━━━━━━━━━━━━━━━━
+Quick Actions:
+━━━━━━━━━━━━━━━━━━━━
 
-Reply with a number or type your question.`.trim();
+1️⃣ My Groups
+2️⃣ Pay Contribution
+3️⃣ Next Payout
+4️⃣ My Receipts
+5️⃣ Support
+6️⃣ Settings
+
+━━━━━━━━━━━━━━━━━━━━
+💬 Or chat naturally with me!
+
+💡 Reply with a number (1-6) or type your question`.trim();
     }
 
-    return `✅ Menu
-1) My Groups
-2) Pay Contribution
-3) Next Payout
-4) Receipts
-5) Support
-6) Settings
+    return `🏠 Main Menu
 
-💬 Or just chat with me naturally!
+━━━━━━━━━━━━━━━━━━━━
+What would you like to do?
+━━━━━━━━━━━━━━━━━━━━
 
-Reply with a number or type your question.`.trim();
+1️⃣ My Groups
+2️⃣ Pay Contribution
+3️⃣ Next Payout
+4️⃣ My Receipts
+5️⃣ Support
+6️⃣ Settings
+
+━━━━━━━━━━━━━━━━━━━━
+💬 Or chat naturally with me!
+
+💡 Reply with a number (1-6) or type your question`.trim();
   },
 
   help: () => {
-    return `🆘 Help & Support
+    return `🆘 Help & Support Center
 
-Main Commands:
-• Type MENU - Show main menu
-• Type HELP - Show this help
-• Type 0 or BACK - Go back one step
+━━━━━━━━━━━━━━━━━━━━
+Quick Commands:
+━━━━━━━━━━━━━━━━━━━━
 
-AI Assistant:
-• Chat naturally! Just type your question or request
-• The AI assistant can help you with:
-  - Creating groups
-  - Understanding how Likelemba works
-  - Payment questions
-  - General support
+📋 MENU - Show main menu
+❓ HELP - Show this help
+⬅️ 0 or BACK - Go back one step
 
-Getting Started:
-• Create a savings group
-• Invite members via link
-• Set contribution rules
-• Track payouts
+━━━━━━━━━━━━━━━━━━━━
+🤖 AI Assistant:
+━━━━━━━━━━━━━━━━━━━━
 
-Need Help?
-Reply SUPPORT to contact our team, or just ask me anything!
+Just chat naturally! I can help you with:
+• Creating savings groups
+• Understanding how Likelemba works
+• Payment questions
+• General support
 
-Safety:
-• All funds are held in escrow
-• Transparent ledger
-• Dispute resolution available
+━━━━━━━━━━━━━━━━━━━━
+🚀 Getting Started:
+━━━━━━━━━━━━━━━━━━━━
 
-Type MENU to continue, or just chat with me! 🤖`.trim();
+1. Create a savings group
+2. Invite members via link
+3. Set contribution rules
+4. Track payouts & cycles
+
+━━━━━━━━━━━━━━━━━━━━
+🛡️ Your Safety:
+━━━━━━━━━━━━━━━━━━━━
+
+✅ All funds held in escrow
+✅ Transparent ledger
+✅ Dispute resolution available
+
+━━━━━━━━━━━━━━━━━━━━
+💬 Need more help?
+Reply SUPPORT or just ask me anything!
+
+💡 Type MENU to continue, or chat with me! 🤖`.trim();
   },
 };
-

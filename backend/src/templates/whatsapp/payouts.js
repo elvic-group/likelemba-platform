@@ -1,44 +1,100 @@
 /**
- * Payouts Templates
+ * Payouts Templates - Enhanced
  */
 module.exports = {
   nextPayout: (payout) => {
     if (!payout) {
       return `💰 Next Payout
 
-You have no scheduled payouts.`.trim();
+━━━━━━━━━━━━━━━━━━━━
+You have no scheduled payouts at this time.
+━━━━━━━━━━━━━━━━━━━━
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply MENU to go back
+💡 Or ask me anything!`.trim();
     }
 
+    const scheduledDate = new Date(payout.scheduled_at);
+    const statusEmoji = payout.status === 'scheduled' ? '📅' : payout.status === 'completed' ? '✅' : '⏳';
+    
     return `💰 Next Payout
 
-${payout.group_name}
-Amount: ${payout.amount} ${payout.currency}
-Scheduled: ${new Date(payout.scheduled_at).toLocaleDateString()}
+━━━━━━━━━━━━━━━━━━━━
+Upcoming Payout:
+━━━━━━━━━━━━━━━━━━━━
 
-Status: ${payout.status}`.trim();
+📛 Group: ${payout.group_name}
+💰 Amount: ${payout.amount} ${payout.currency}
+📅 Scheduled: ${scheduledDate.toLocaleDateString()}
+${statusEmoji} Status: ${payout.status}
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply MENU to go back`.trim();
   },
 
   quorumMet: (groupName, payoutDate, recipientName) => {
-    return `🎯 Great news!
+    return `🎯 Great News!
 
-${groupName} has reached the required contributions for this cycle.
+━━━━━━━━━━━━━━━━━━━━
+${groupName} has reached the required contributions!
+━━━━━━━━━━━━━━━━━━━━
 
-Next payout: ${new Date(payoutDate).toLocaleDateString()} to ${recipientName}.`.trim();
+✅ Quorum met for this cycle
+
+━━━━━━━━━━━━━━━━━━━━
+📅 Next Payout: ${new Date(payoutDate).toLocaleDateString()}
+👤 Recipient: ${recipientName}
+
+━━━━━━━━━━━━━━━━━━━━
+🎉 Congratulations to all members!
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply MENU to go back`.trim();
   },
 
   payoutScheduled: (payoutDate, amount, currency, recipientName) => {
-    return `💰 Payout scheduled
+    return `💰 Payout Scheduled
 
-On ${new Date(payoutDate).toLocaleDateString()}, ${amount} ${currency} will be released to ${recipientName}.
+━━━━━━━━━━━━━━━━━━━━
+Payout Details:
+━━━━━━━━━━━━━━━━━━━━
 
-Reply OK to confirm, or DISPUTE if something is wrong.`.trim();
+📅 Date: ${new Date(payoutDate).toLocaleDateString()}
+💰 Amount: ${amount} ${currency}
+👤 Recipient: ${recipientName}
+
+━━━━━━━━━━━━━━━━━━━━
+The payout will be released on the scheduled date.
+
+━━━━━━━━━━━━━━━━━━━━
+What would you like to do?
+
+1️⃣ Confirm
+2️⃣ Dispute
+3️⃣ Get Help
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply OK to confirm
+💡 Reply DISPUTE if something is wrong`.trim();
   },
 
   payoutCompleted: (amount, currency, recipientName, groupName, payoutRef) => {
-    return `🎉 Payout sent!
+    return `🎉 Payout Sent!
 
-${amount} ${currency} has been paid to ${recipientName} for ${groupName}.
-Ref: ${payoutRef}`.trim();
+━━━━━━━━━━━━━━━━━━━━
+Payment Completed:
+━━━━━━━━━━━━━━━━━━━━
+
+💰 Amount: ${amount} ${currency}
+👤 Recipient: ${recipientName}
+📛 Group: ${groupName}
+📋 Reference: ${payoutRef.substring(0, 8)}
+
+━━━━━━━━━━━━━━━━━━━━
+✅ Payout has been successfully processed!
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply MENU to go back`.trim();
   },
 };
-

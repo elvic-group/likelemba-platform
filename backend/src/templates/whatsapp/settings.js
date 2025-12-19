@@ -1,19 +1,27 @@
 /**
- * Settings Templates
+ * Settings Templates - Enhanced
  */
 module.exports = {
   menu: (user) => {
     return `⚙️ Settings
 
-1) Change Language
-2) Set PIN
-3) Notification Preferences
-4) Account Info
+━━━━━━━━━━━━━━━━━━━━
+Account Settings:
+━━━━━━━━━━━━━━━━━━━━
 
-Current language: ${user.locale || 'en'}
-PIN: ${user.pin_hash ? 'Set' : 'Not set'}
+1️⃣ Change Language
+2️⃣ Set PIN
+3️⃣ Notification Preferences
+4️⃣ Account Info
 
-Reply with a number.`.trim();
+━━━━━━━━━━━━━━━━━━━━
+Current Settings:
+━━━━━━━━━━━━━━━━━━━━
+
+🌐 Language: ${user.locale || 'English'}
+🔒 PIN: ${user.pin_hash ? '✅ Set' : '❌ Not set'}
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply with a number (1-4)`.trim();
   },
 };
-

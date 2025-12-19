@@ -1,27 +1,41 @@
 /**
- * Support Templates
+ * Support Templates - Enhanced
  */
 module.exports = {
   menu: () => {
-    return `🧑‍💼 Support
+    return `🧑‍💼 Support Center
 
-How can we help you today?
+━━━━━━━━━━━━━━━━━━━━
+How can we help you?
+━━━━━━━━━━━━━━━━━━━━
 
-1) Payment Issues
-2) Group Questions
-3) Technical Support
-4) Dispute Help
-5) Contact Agent
+1️⃣ Payment Issues
+2️⃣ Group Questions
+3️⃣ Technical Support
+4️⃣ Dispute Help
+5️⃣ Contact Agent
 
-Reply with a number, or describe your issue.`.trim();
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply with a number (1-5)
+💡 Or describe your issue naturally!`.trim();
   },
 
   handoff: () => {
-    return `🧑‍💼 A support agent will assist you shortly.
+    return `🧑‍💼 Support Request Received
 
-In the meantime, reply with:
-• PAYMENT REF (if you have it)
-• A short description of the issue`.trim();
+━━━━━━━━━━━━━━━━━━━━
+A support agent will assist you shortly!
+━━━━━━━━━━━━━━━━━━━━
+
+While you wait, please provide:
+
+📋 Payment Reference (if applicable)
+📝 Brief description of your issue
+
+━━━━━━━━━━━━━━━━━━━━
+⏳ Our team typically responds within 24 hours
+
+━━━━━━━━━━━━━━━━━━━━
+💡 Reply MENU to go back`.trim();
   },
 };
-
