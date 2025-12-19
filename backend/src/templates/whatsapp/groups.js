@@ -1,33 +1,34 @@
 /**
- * Groups Templates - Enhanced
+ * Groups Templates - Complete Redesign
+ * Community-focused with beautiful emojis
  */
 module.exports = {
   listGroups: (groups) => {
     if (groups.length === 0) {
-      return `📋 My Groups
+      return `👥 My Groups
 
-━━━━━━━━━━━━━━━━━━━━
-You're not part of any groups yet.
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌟 You're not part of any groups yet.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━
-What would you like to do?
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤝 What would you like to do?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1️⃣ Create New Group
-2️⃣ Join with Invite Link
-3️⃣ Get Help
+1️⃣ ✨ Create New Group
+2️⃣ 🔗 Join with Invite Link
+3️⃣ 💡 Get Help
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Reply CREATE to start a new group
 💡 Or ask me anything!`.trim();
     }
 
-    let message = `📋 My Groups
+    let message = `👥 My Groups
 
-━━━━━━━━━━━━━━━━━━━━
-Your Savings Groups:
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤝 Your Savings Groups:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 `;
     groups.forEach((group, index) => {
@@ -39,7 +40,7 @@ Your Savings Groups:
       message += `   ${statusEmoji} ${group.status}\n\n`;
     });
 
-    message += `━━━━━━━━━━━━━━━━━━━━
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Reply with group number to view details
 💡 Reply CREATE to start a new group`;
 
@@ -49,9 +50,9 @@ Your Savings Groups:
   groupCreated: (group) => {
     return `🎉 Group Created Successfully!
 
-━━━━━━━━━━━━━━━━━━━━
-Group Details:
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✨ Your group is ready!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📛 Name: ${group.name}
 💰 Contribution: ${group.contribution_amount} ${group.currency}
@@ -59,23 +60,23 @@ Group Details:
 📆 Starts: ${group.start_date}
 👥 Members: ${group.members_count}
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔗 Invite Link:
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ${group.invite_link}
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📤 Share this link with your members!
 
-━━━━━━━━━━━━━━━━━━━━
-What's next?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤝 What's next?
 
-1️⃣ View Group Rules
-2️⃣ Invite More Members
-3️⃣ Start Group
+1️⃣ 📋 View Group Rules
+2️⃣ 👥 Invite More Members
+3️⃣ 🚀 Start Group
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Reply RULES to view full rules
 💡 Reply START when everyone has joined`.trim();
   },
@@ -83,28 +84,28 @@ What's next?
   joinGroup: (group) => {
     return `🤝 Group Invitation
 
-━━━━━━━━━━━━━━━━━━━━
-You've been invited to join:
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌟 You've been invited to join:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📛 ${group.name}
 
-━━━━━━━━━━━━━━━━━━━━
-Group Details:
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 Group Details:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💰 Contribution: ${group.contribution_amount} ${group.currency}
 📅 Frequency: ${group.frequency}
 👥 Members: ${group.members_count}
 
-━━━━━━━━━━━━━━━━━━━━
-Would you like to join?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤝 Would you like to join?
 
-1️⃣ Yes, I Agree
-2️⃣ View Rules First
-3️⃣ Decline
+1️⃣ ✅ Yes, I Agree
+2️⃣ 📋 View Rules First
+3️⃣ ❌ Decline
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Reply AGREE to join
 💡 Reply RULES to see details`.trim();
   },
@@ -112,25 +113,25 @@ Would you like to join?
   groupDetails: (group, members) => {
     let message = `📊 Group Details
 
-━━━━━━━━━━━━━━━━━━━━
-${group.name}
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📛 ${group.name}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 💰 Contribution: ${group.contribution_amount} ${group.currency}
 📅 Frequency: ${group.frequency}
 👥 Members: ${members.length}/${group.members_count}
 📆 Status: ${group.status}
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👥 Group Members:
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 `;
     members.forEach((member, index) => {
       message += `${index + 1}️⃣ ${member.display_name || member.phone_e164}\n`;
     });
 
-    message += `\n━━━━━━━━━━━━━━━━━━━━
+    message += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 Reply 0 to go back
 💡 Reply MENU for main menu`;
 
