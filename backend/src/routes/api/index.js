@@ -16,6 +16,9 @@ router.use('/groups', require('./groups'));
 // Users API
 router.use('/users', require('./users'));
 
+// Auth API
+router.use('/auth', require('./auth'));
+
 // Payments API
 router.use('/payments', require('./payments'));
 

@@ -104,6 +104,10 @@ class GroupsService {
       // Add owner as admin member
       await this.addMember(groupId, ownerUserId, 'admin');
 
+      // Initialize cycles for the group
+      const cycleScheduler = require('../cycles/scheduler');
+      await cycleScheduler.initializeGroupCycles(groupId);
+
       return group;
     } catch (error) {
       console.error('Error creating group:', error);

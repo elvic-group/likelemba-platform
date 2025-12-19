@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS users (
   two_fa_enabled BOOLEAN DEFAULT FALSE,
   two_fa_secret VARCHAR(255),
   role VARCHAR(50) DEFAULT 'member', -- member, group_admin, platform_admin
+  current_service VARCHAR(50), -- Current service user is in
+  current_step VARCHAR(50), -- Current step in service flow
+  context JSONB, -- Service-specific context data
+  session_data JSONB, -- Temporary session data
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
   last_seen_at TIMESTAMP

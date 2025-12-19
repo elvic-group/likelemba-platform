@@ -63,6 +63,12 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Start notification scheduler
+const notificationScheduler = require('./services/notifications/scheduler');
+if (process.env.NODE_ENV !== 'test') {
+  notificationScheduler.start();
+}
+
 // Start server
 const server = app.listen(PORT, () => {
   console.log(`🚀 Likelemba server running on port ${PORT}`);

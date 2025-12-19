@@ -1,0 +1,11 @@
+🌐 YOUR GREEN API WEBHOOK URL:
+
+https://c205ca9afd53.ngrok-free.app/webhooks/greenapi
+
+📋 Copy this URL and paste it in Green API Console:
+   https://console.green-api.com/
+   
+   Instance: 7700330457
+   Settings → Webhook Settings
+
+💡 Keep this script running while testing!

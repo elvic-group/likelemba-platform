@@ -8,8 +8,27 @@
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "test": "node --test tests/**/*.test.js",
-    "db:migrate": "node scripts/migrate.js",
-    "db:seed": "node scripts/seed.js"
+    "db:migrate": "node scripts/migrate-likelemba-schema.js",
+    "db:migrate:standard": "node scripts/migrate.js",
+    "db:setup": "./scripts/setup-database.sh",
+    "db:seed": "node scripts/seed.js",
+    "test:connection": "node scripts/test-connection.js",
+    "test:platform": "node scripts/test-platform.js",
+    "test:server": "node scripts/test-server.js",
+    "test:whatsapp": "node scripts/send-test-message.js",
+    "test:flow": "node scripts/test-full-welcome-flow.js",
+    "webhook:url": "node scripts/get-webhook-url.js",
+    "webhook:tunnel": "./scripts/start-ngrok.sh",
+    "webhook:start": "node scripts/start-ngrok-tunnel.js",
+    "webhook:deploy": "node scripts/quick-deploy-webhook.js",
+    "webhook:deploy:auto": "node scripts/quick-deploy-webhook.js --configure",
+    "webhook:process-queue": "node scripts/process-queued-webhooks.js",
+    "test:webhook": "node scripts/test-webhook-endpoint.js",
+    "test:webhook:response": "node scripts/test-webhook-response.js",
+    "check:setup": "node scripts/check-setup.js",
+    "check:env": "node scripts/check-env.js",
+    "verify": "node scripts/verify-deployment.js",
+    "start:safe": "node scripts/start-server.js"
   },
   "keywords": [
     "whatsapp",
@@ -23,21 +42,24 @@
   "license": "MIT",
   "dependencies": {
     "@green-api/whatsapp-api-client": "^0.4.4",
-    "express": "^5.2.1",
-    "pg": "^8.16.3",
-    "dotenv": "^16.4.5",
-    "stripe": "^20.0.0",
-    "jsonwebtoken": "^9.0.3",
+    "@ngrok/ngrok": "^1.7.0",
     "bcryptjs": "^2.4.3",
-    "uuid": "^11.0.3",
-    "helmet": "^8.1.0",
-    "cors": "^2.8.5",
-    "morgan": "^1.10.1",
-    "openai": "^6.14.0",
-    "node-cron": "^3.0.3",
-    "redis": "^4.7.0",
     "bullmq": "^5.25.0",
-    "crypto": "^1.0.1"
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "form-data": "^4.0.5",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "node-cron": "^3.0.3",
+    "openai": "^6.14.0",
+    "pg": "^8.16.3",
+    "redis": "^4.7.0",
+    "sharp": "^0.34.5",
+    "stripe": "^20.0.0",
+    "uuid": "^11.0.3",
+    "yaml": "^2.8.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"
@@ -46,4 +68,3 @@
     "node": ">=18.0.0"
   }
 }
-

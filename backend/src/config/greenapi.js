@@ -22,6 +22,16 @@ if (!idInstance || !apiTokenInstance) {
         return { idMessage: 'dummy' };
       },
     },
+    file: {
+      sendFileByUpload: async () => {
+        console.warn('⚠️ Green API not configured - file not sent');
+        return { idMessage: 'dummy' };
+      },
+      sendFileByUrl: async () => {
+        console.warn('⚠️ Green API not configured - file not sent');
+        return { idMessage: 'dummy' };
+      },
+    },
     service: {
       sendTyping: async () => {
         console.warn('⚠️ Green API not configured - typing not sent');
@@ -31,6 +41,12 @@ if (!idInstance || !apiTokenInstance) {
     account: {
       getStateInstance: async () => {
         return { stateInstance: 'notAuthorized' };
+      },
+    },
+    service: {
+      sendTyping: async () => {
+        console.warn('⚠️ Green API not configured - typing not sent');
+        return {};
       },
     },
   };

@@ -11,6 +11,8 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
+  // Set search path to likelemba schema
+  options: '-c search_path=likelemba,public',
 });
 
 // Test connection
@@ -26,12 +28,19 @@ pool.on('error', (err) => {
 const query = async (text, params) => {
   const start = Date.now();
   try {
-    const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    if (duration > 1000) {
-      console.log('⚠️ Slow query:', { text, duration });
+    // Ensure we're using likelemba schema
+    const client = await pool.connect();
+    try {
+      await client.query('SET search_path TO likelemba, public');
+      const res = await client.query(text, params);
+      const duration = Date.now() - start;
+      if (duration > 1000) {
+        console.log('⚠️ Slow query:', { text, duration });
+      }
+      return res;
+    } finally {
+      client.release();
     }
-    return res;
   } catch (error) {
     console.error('Database query error:', { text, error: error.message });
     throw error;
@@ -42,6 +51,7 @@ const query = async (text, params) => {
 const transaction = async (callback) => {
   const client = await pool.connect();
   try {
+    await client.query('SET search_path TO likelemba, public');
     await client.query('BEGIN');
     const result = await callback(client);
     await client.query('COMMIT');

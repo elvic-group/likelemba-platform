@@ -45,3 +45,6 @@ New apis keys*.md
 # Heroku
 .heroku/
 
+# Specstory history (may contain sensitive data)
+.specstory/history/
+
