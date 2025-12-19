@@ -144,6 +144,11 @@ CREATE TABLE IF NOT EXISTS likelemba.payments (
   amount DECIMAL(15, 2) NOT NULL,
   currency VARCHAR(10) DEFAULT 'KES',
   status VARCHAR(50) DEFAULT 'pending',
+  platform_commission DECIMAL(15, 2) DEFAULT 0,
+  commission_rate DECIMAL(5, 4) DEFAULT 0.05,
+  stripe_fee DECIMAL(15, 2) DEFAULT 0,
+  stripe_fee_details JSONB,
+  net_amount DECIMAL(15, 2),
   raw_payload_json JSONB,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()

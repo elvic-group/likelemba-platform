@@ -7,8 +7,71 @@ const { v4: uuidv4 } = require('uuid');
 const stripe = require('../../config/stripe');
 const escrowService = require('../escrow');
 const ledgerService = require('../ledger');
+const stripeFeeCalculator = require('./stripeFeeCalculator');
+
+// Platform commission rate (5% = 0.05)
+const PLATFORM_COMMISSION_RATE = parseFloat(process.env.PLATFORM_COMMISSION_RATE || '0.05');
 
 class PaymentsService {
+  /**
+   * Calculate platform commission
+   * @param {number} grossAmount - Gross payment amount
+   * @returns {Object} Commission breakdown
+   */
+  calculateCommission(grossAmount) {
+    const commissionAmount = grossAmount * PLATFORM_COMMISSION_RATE;
+    const netAmount = grossAmount - commissionAmount;
+    
+    return {
+      grossAmount: parseFloat(grossAmount.toFixed(2)),
+      commissionAmount: parseFloat(commissionAmount.toFixed(2)),
+      commissionRate: PLATFORM_COMMISSION_RATE,
+      netAmount: parseFloat(netAmount.toFixed(2)),
+    };
+  }
+
+  /**
+   * Calculate complete fee breakdown (Stripe + Platform)
+   * @param {number} grossAmount - Gross payment amount
+   * @param {Object} options - Stripe fee options
+   * @returns {Object} Complete fee breakdown
+   */
+  calculateCompleteFees(grossAmount, options = {}) {
+    // Calculate Stripe fee
+    const stripeFee = stripeFeeCalculator.calculateFee(grossAmount, options);
+    
+    // Calculate platform commission (on gross amount)
+    const platformCommission = this.calculateCommission(grossAmount);
+    
+    // Net amount after platform commission (goes to escrow)
+    const netToEscrow = platformCommission.netAmount;
+    
+    // Platform net revenue (commission minus Stripe fee)
+    const platformNetRevenue = platformCommission.commissionAmount - stripeFee.stripeFee;
+    
+    return {
+      grossAmount: grossAmount,
+      
+      // Stripe fees
+      stripeFee: stripeFee.stripeFee,
+      stripeFeePercentage: stripeFee.stripeFeePercentage,
+      stripeFeeBreakdown: stripeFee.stripeFeeBreakdown,
+      amountAfterStripeFee: stripeFee.amountAfterStripeFee,
+      
+      // Platform commission
+      platformCommission: platformCommission.commissionAmount,
+      platformCommissionRate: platformCommission.commissionRate,
+      
+      // Net amounts
+      netToEscrow: netToEscrow,
+      platformNetRevenue: parseFloat(platformNetRevenue.toFixed(2)),
+      
+      // Summary
+      totalFees: stripeFee.stripeFee + platformCommission.commissionAmount,
+      totalFeesPercentage: parseFloat(((stripeFee.stripeFee + platformCommission.commissionAmount) / grossAmount * 100).toFixed(2)),
+    };
+  }
+
   /**
    * Get payment by ID
    */
@@ -61,12 +124,26 @@ class PaymentsService {
         },
       });
 
-      // Create payment record
+      // Calculate commission
+      const commission = this.calculateCommission(amount);
+
+      // Create payment record with commission
       await query(
         `INSERT INTO payments (
-          id, contribution_id, provider, provider_ref, amount, currency, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
-        [paymentId, contributionId, 'stripe', paymentIntent.id, amount, currency]
+          id, contribution_id, provider, provider_ref, amount, currency, status,
+          platform_commission, commission_rate, net_amount
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9)`,
+        [
+          paymentId, 
+          contributionId, 
+          'stripe', 
+          paymentIntent.id, 
+          amount, 
+          currency,
+          commission.commissionAmount,
+          commission.commissionRate,
+          commission.netAmount
+        ]
       );
 
       // Record ledger event
@@ -131,12 +208,26 @@ class PaymentsService {
         },
       });
 
-      // Create payment record
+      // Calculate commission
+      const commission = this.calculateCommission(amount);
+
+      // Create payment record with commission
       await query(
         `INSERT INTO payments (
-          id, contribution_id, provider, provider_ref, amount, currency, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
-        [paymentId, contributionId, 'stripe', session.id, amount, currency]
+          id, contribution_id, provider, provider_ref, amount, currency, status,
+          platform_commission, commission_rate, net_amount
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9)`,
+        [
+          paymentId, 
+          contributionId, 
+          'stripe', 
+          session.id, 
+          amount, 
+          currency,
+          commission.commissionAmount,
+          commission.commissionRate,
+          commission.netAmount
+        ]
       );
 
       return {
@@ -168,6 +259,50 @@ class PaymentsService {
       const contribution = await query('SELECT * FROM contributions WHERE id = $1', [payment.contribution_id]);
 
       if (contribution.rows[0]) {
+        // Calculate Stripe fee from charge data if available
+        let stripeFee = 0;
+        let stripeFeeDetails = null;
+        
+        if (providerData.charge) {
+          const charge = providerData.charge;
+          // Get actual Stripe fee from balance transaction
+          if (charge.balance_transaction) {
+            try {
+              const balanceTransaction = await stripe.balanceTransactions.retrieve(charge.balance_transaction);
+              stripeFee = balanceTransaction.fee / 100; // Convert from cents
+              stripeFeeDetails = {
+                fee: stripeFee,
+                net: balanceTransaction.net / 100,
+                currency: balanceTransaction.currency.toUpperCase(),
+              };
+            } catch (error) {
+              console.error('Error retrieving balance transaction:', error);
+              // Fallback to estimated fee
+              const estimated = stripeFeeCalculator.calculateFee(payment.amount);
+              stripeFee = estimated.stripeFee;
+              stripeFeeDetails = estimated;
+            }
+          } else {
+            // Estimate fee if balance transaction not available
+            const estimated = stripeFeeCalculator.calculateFee(payment.amount);
+            stripeFee = estimated.stripeFee;
+            stripeFeeDetails = estimated;
+          }
+        } else {
+          // Estimate fee if charge not available
+          const estimated = stripeFeeCalculator.calculateFee(payment.amount);
+          stripeFee = estimated.stripeFee;
+          stripeFeeDetails = estimated;
+        }
+
+        // Update payment with Stripe fee
+        await query(
+          `UPDATE payments 
+           SET stripe_fee = $1, stripe_fee_details = $2, updated_at = NOW()
+           WHERE id = $3`,
+          [stripeFee, JSON.stringify(stripeFeeDetails), paymentId]
+        );
+
         // Update contribution
         await query(
           `UPDATE contributions 
@@ -176,10 +311,45 @@ class PaymentsService {
           [payment.contribution_id]
         );
 
-        // Record escrow deposit
+        // Get cycle and group info for commission tracking
         const cycle = await query('SELECT * FROM cycles WHERE id = $1', [contribution.rows[0].cycle_id]);
+        
         if (cycle.rows[0]) {
-          await escrowService.deposit(cycle.rows[0].group_id, cycle.rows[0].id, payment.amount, paymentId);
+          // Use net amount (after commission) for escrow deposit
+          const netAmount = payment.net_amount || (payment.amount - (payment.platform_commission || 0));
+          
+          // Record escrow deposit (net amount only)
+          await escrowService.deposit(
+            cycle.rows[0].group_id, 
+            cycle.rows[0].id, 
+            netAmount, 
+            paymentId,
+            `Contribution payment (commission: ${payment.platform_commission || 0} ${payment.currency}, Stripe fee: ${stripeFee.toFixed(2)} ${payment.currency})`
+          );
+
+          // Record platform commission
+          const commissionAmount = payment.platform_commission || 0;
+          const commissionRate = payment.commission_rate || PLATFORM_COMMISSION_RATE;
+          
+          if (commissionAmount > 0) {
+            await query(
+              `INSERT INTO platform_commissions (
+                payment_id, contribution_id, group_id, cycle_id,
+                gross_amount, commission_amount, commission_rate, net_amount, currency, status
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'collected')`,
+              [
+                paymentId,
+                payment.contribution_id,
+                cycle.rows[0].group_id,
+                cycle.rows[0].id,
+                payment.amount,
+                commissionAmount,
+                commissionRate,
+                netAmount,
+                payment.currency
+              ]
+            );
+          }
         }
 
         // Record ledger event
@@ -189,7 +359,11 @@ class PaymentsService {
           subjectId: paymentId,
           payload: {
             provider: payment.provider,
-            amount: payment.amount,
+            grossAmount: payment.amount,
+            stripeFee: stripeFee,
+            platformCommission: payment.platform_commission || 0,
+            netAmount: payment.net_amount || payment.amount,
+            platformNetRevenue: (payment.platform_commission || 0) - stripeFee,
             currency: payment.currency,
             providerRef,
           },

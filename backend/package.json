@@ -18,6 +18,7 @@
     "test:whatsapp": "node scripts/send-test-message.js",
     "test:flow": "node scripts/test-full-welcome-flow.js",
     "webhook:url": "node scripts/get-webhook-url.js",
+    "webhook:update": "node scripts/update-green-api-webhook.js",
     "webhook:tunnel": "./scripts/start-ngrok.sh",
     "webhook:start": "node scripts/start-ngrok-tunnel.js",
     "webhook:deploy": "node scripts/quick-deploy-webhook.js",

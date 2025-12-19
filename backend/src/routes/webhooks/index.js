@@ -39,7 +39,16 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
     }
     
     const stripe = require('../../config/stripe');
-    const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    
+    // Verify webhook signature - this can throw if signature is invalid
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err) {
+      // Signature verification failed - return 400 to indicate bad request
+      console.error('❌ Stripe webhook signature verification failed:', err.message);
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
     
     console.log('💳 Stripe webhook received:', event.type);
     
@@ -48,10 +57,14 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
       console.error('Error processing Stripe webhook:', error);
     });
     
+    // Always return 200 immediately after signature verification
+    // This prevents Stripe from retrying the webhook
     res.json({ received: true });
   } catch (error) {
+    // This catch block should rarely be hit if signature verification is handled above
+    // But if it is, we still return 200 to prevent retries for unexpected errors
     console.error('Stripe webhook error:', error);
-    res.status(400).json({ error: error.message });
+    res.json({ received: true });
   }
 });
 

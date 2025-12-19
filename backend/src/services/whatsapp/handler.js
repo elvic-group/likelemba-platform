@@ -37,17 +37,32 @@ class WhatsAppHandler {
       const phone = senderData.sender.replace('@c.us', '');
       const senderName = senderData.senderName || 'User';
 
-      // Extract message text
+      // Extract message text - try multiple formats
       let message = '';
+      
+      // Try different message extraction paths
       if (messageData?.textMessageData?.textMessage) {
         message = messageData.textMessageData.textMessage;
       } else if (messageData?.textMessage) {
         message = messageData.textMessage;
+      } else if (messageData?.extendedTextMessageData?.text) {
+        message = messageData.extendedTextMessageData.text;
+      } else if (messageData?.typeMessage === 'textMessage' && messageData.textMessageData?.textMessage) {
+        message = messageData.textMessageData.textMessage;
+      } else if (typeof messageData === 'string') {
+        message = messageData;
       }
 
-      // Skip if no text message
+      // Debug: Log webhook structure if no message found
       if (!message || message.trim().length === 0) {
         console.log(`📨 Skipping webhook - no text message from ${phone}`);
+        console.log('🔍 Debug - Webhook structure:', JSON.stringify({
+          typeWebhook: webhookData.typeWebhook,
+          hasMessageData: !!messageData,
+          messageDataType: messageData?.typeMessage,
+          messageDataKeys: messageData ? Object.keys(messageData) : [],
+          fullMessageData: messageData
+        }, null, 2));
         return;
       }
 

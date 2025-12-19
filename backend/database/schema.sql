@@ -146,6 +146,11 @@ CREATE TABLE IF NOT EXISTS payments (
   amount DECIMAL(15, 2) NOT NULL,
   currency VARCHAR(10) DEFAULT 'KES',
   status VARCHAR(50) DEFAULT 'pending', -- pending, processing, succeeded, failed, refunded
+  platform_commission DECIMAL(15, 2) DEFAULT 0, -- Platform commission (5% default)
+  commission_rate DECIMAL(5, 4) DEFAULT 0.05, -- Commission rate as decimal (0.05 = 5%)
+  stripe_fee DECIMAL(15, 2) DEFAULT 0, -- Stripe processing fee
+  stripe_fee_details JSONB, -- Stripe fee breakdown (percentage, fixed, card type, etc.)
+  net_amount DECIMAL(15, 2), -- Net amount after commission (goes to escrow)
   raw_payload_json JSONB,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
@@ -154,6 +159,30 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE INDEX idx_payments_contribution ON payments(contribution_id);
 CREATE INDEX idx_payments_provider_ref ON payments(provider_ref);
 CREATE INDEX idx_payments_status ON payments(status);
+
+-- Platform commissions tracking
+CREATE TABLE IF NOT EXISTS platform_commissions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  payment_id UUID REFERENCES payments(id) ON DELETE RESTRICT,
+  contribution_id UUID REFERENCES contributions(id) ON DELETE RESTRICT,
+  group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
+  cycle_id UUID REFERENCES cycles(id) ON DELETE CASCADE,
+  gross_amount DECIMAL(15, 2) NOT NULL,
+  commission_amount DECIMAL(15, 2) NOT NULL,
+  commission_rate DECIMAL(5, 4) NOT NULL,
+  net_amount DECIMAL(15, 2) NOT NULL,
+  currency VARCHAR(10) DEFAULT 'KES',
+  status VARCHAR(50) DEFAULT 'collected', -- collected, refunded
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_commissions_payment ON platform_commissions(payment_id);
+CREATE INDEX idx_commissions_contribution ON platform_commissions(contribution_id);
+CREATE INDEX idx_commissions_group ON platform_commissions(group_id);
+CREATE INDEX idx_commissions_cycle ON platform_commissions(cycle_id);
+CREATE INDEX idx_commissions_status ON platform_commissions(status);
+CREATE INDEX idx_commissions_created ON platform_commissions(created_at);
 
 -- ============================================
 -- ESCROW

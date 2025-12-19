@@ -4,6 +4,7 @@
  */
 const paymentsService = require('./index');
 const ledgerService = require('../ledger');
+const stripe = require('../../config/stripe');
 
 class StripeWebhookHandler {
   /**
@@ -53,10 +54,23 @@ class StripeWebhookHandler {
     const metadata = paymentIntent.metadata;
 
     if (metadata.payment_id) {
+      // Get charge details to extract actual Stripe fees
+      let charge = null;
+      if (paymentIntent.latest_charge) {
+        try {
+          charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
+        } catch (error) {
+          console.error('Error retrieving charge:', error);
+        }
+      }
+
       await paymentsService.handlePaymentSuccess(
         metadata.payment_id,
         paymentIntent.id,
-        paymentIntent
+        {
+          paymentIntent,
+          charge,
+        }
       );
     }
   }
@@ -101,10 +115,26 @@ class StripeWebhookHandler {
     const metadata = session.metadata;
 
     if (metadata.payment_id) {
+      // Get payment intent and charge details
+      let charge = null;
+      if (session.payment_intent) {
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent);
+          if (paymentIntent.latest_charge) {
+            charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
+          }
+        } catch (error) {
+          console.error('Error retrieving charge from session:', error);
+        }
+      }
+
       await paymentsService.handlePaymentSuccess(
         metadata.payment_id,
         session.id,
-        session
+        {
+          session,
+          charge,
+        }
       );
     }
   }
