@@ -69,7 +69,22 @@ class WhatsAppHandler {
       console.log(`📨 Message from ${phone}: ${message}`);
 
       // Get or create user
-      let user = await usersService.getUserByPhone(phone);
+      let user;
+      try {
+        user = await usersService.getUserByPhone(phone);
+      } catch (dbError) {
+        console.error('❌ Database error getting user:', dbError);
+        // Try to send error message, but don't crash
+        try {
+          await this.sendMessage(
+            phone,
+            '⚠️ Service temporarily unavailable. Please try again in a moment.'
+          );
+        } catch (sendError) {
+          console.error('❌ Could not send error message:', sendError);
+        }
+        return;
+      }
 
       if (!user) {
         try {
@@ -80,20 +95,42 @@ class WhatsAppHandler {
           await this.sendWelcomeMessage(phone, user.display_name || senderName);
           return;
         } catch (createError) {
-          console.error('Error creating user:', createError);
-          await this.sendMessage(
-            phone,
-            'Sorry, there was an error setting up your account. Please try again later.'
-          );
+          console.error('❌ Error creating user:', createError);
+          try {
+            await this.sendMessage(
+              phone,
+              'Sorry, there was an error setting up your account. Please try again later.'
+            );
+          } catch (sendError) {
+            console.error('❌ Could not send error message:', sendError);
+          }
           return;
         }
       } else {
         // Update last seen
-        await query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [user.id]);
+        try {
+          await query('UPDATE users SET last_seen_at = NOW() WHERE id = $1', [user.id]);
+        } catch (updateError) {
+          console.warn('⚠️ Could not update last_seen_at:', updateError.message);
+          // Continue anyway - not critical
+        }
       }
 
       // Route message
-      await this.routeMessage(user, message);
+      try {
+        await this.routeMessage(user, message);
+      } catch (routeError) {
+        console.error('❌ Error routing message:', routeError);
+        // Try to send error message
+        try {
+          await this.sendMessage(
+            phone,
+            '⚠️ Sorry, I encountered an error processing your message. Please try again or type MENU for options.'
+          );
+        } catch (sendError) {
+          console.error('❌ Could not send error message:', sendError);
+        }
+      }
     } catch (error) {
       console.error('Error handling webhook:', error);
     }
